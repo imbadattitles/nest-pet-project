@@ -1,0 +1,65 @@
+### Переменные
+@baseUrl = http://localhost:5000/api
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJzdWIiOiI2OWIyNGEwNGVhOTIxMjliNjNmMmI3MTMiLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwiaWQiOiI2OWIyNGEwNGVhOTIxMjliNjNmMmI3MTMiLCJpYXQiOjE3NzMyOTIwNTksImV4cCI6MTc3Mzg5Njg1OX0.EZ6Doa2f5ogt1LeW2dTa_d5f0PFek9oyh5yYrb1bUpw
+
+### Регистрация
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "email": "user@example.com",
+    "username": "testuser",
+    "password": "password123"
+}
+
+### Логин
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "user@example.com",
+    "password": "password123"
+}
+
+### Профиль
+GET {{baseUrl}}/auth/profile
+Authorization: Bearer {{token}}
+
+### Создать пост
+POST {{baseUrl}}/posts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "title": "Мой первый пост в NestJS",
+    "content": "Это невероятно! NestJS такой крутой фреймворк!"
+}
+
+### Все посты
+GET {{baseUrl}}/posts?page=1&limit=10
+
+### Мой пост
+GET {{baseUrl}}/posts/ID_ПОСТА
+
+
+
+
+### ========== USERS CONTROLLER ==========
+
+### Получить всех пользователей (требуется токен)
+GET {{baseUrl}}/users
+Authorization: Bearer {{token}}
+
+### Получить пользователя по ID
+GET {{baseUrl}}/users/ID_ПОЛЬЗОВАТЕЛЯ
+Authorization: Bearer {{token}}
+
+### Получить свой профиль
+GET {{baseUrl}}/users/me/profile
+Authorization: Bearer {{token}}
+
+### Получить посты пользователя
+GET {{baseUrl}}/users/69b24a04ea92129b63f2b713/posts?page=1&limit=5
+
+### Найти пользователя по username
+GET {{baseUrl}}/users/by-username/testuser

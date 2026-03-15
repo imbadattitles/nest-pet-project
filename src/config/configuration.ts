@@ -1,13 +1,25 @@
 export default () => ({
-    port: parseInt(process.env.PORT as string, 10) || 5000,
-    database: {
-      uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/nest-blog',
+  port: parseInt(process.env.PORT as string, 10 ) || 5000,
+  database: {
+    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/nest-blog',
+  },
+  jwt: {
+    access: {
+      secret: process.env.JWT_ACCESS_SECRET || 'access-secret-key-change-in-production',
+      expiresIn: process.env.JWT_ACCESS_EXPIRE || '15m', // 15 минут
     },
-    jwt: {
-      secret: process.env.JWT_SECRET || 'super-secret-jwt-key',
-      expiresIn: process.env.JWT_EXPIRE || '7d',
+    refresh: {
+      secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key-change-in-production',
+      expiresIn: process.env.JWT_REFRESH_EXPIRE || '7d', // 7 дней
     },
-    bcrypt: {
-      saltRounds: 10,
-    },
-  });
+  },
+  bcrypt: {
+    saltRounds: 10,
+  },
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    domain: process.env.COOKIE_DOMAIN || undefined,
+  },
+});

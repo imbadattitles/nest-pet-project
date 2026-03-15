@@ -7,12 +7,15 @@ import {
     ForbiddenException,
     Query,
     DefaultValuePipe,
-    ParseIntPipe
+    ParseIntPipe,
+    Put,
+    Body
   } from '@nestjs/common';
   import { UsersService } from './users.service';
   import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
   import { CurrentUser } from '../common/decorators/current-user.decorator';
   import { PostsService } from 'src/posts/posts.service';
+import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
   
   @Controller('users')
   export class UsersController {
@@ -27,7 +30,7 @@ import {
      * Доступно только администраторам (в будущем)
      */
     @Get()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(AccessTokenGuard)
     async findAll() {
       const users = await this.usersService.findAll();
       return {
@@ -43,7 +46,7 @@ import {
      * Доступно всем авторизованным пользователям
      */
     @Get(':id')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(AccessTokenGuard)
     async findOne(@Param('id') id: string) {
       const user = await this.usersService.findById(id);
       
@@ -64,7 +67,7 @@ import {
      * Доступно только владельцу
      */
     @Get('me/profile')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(AccessTokenGuard)
     async getMyProfile(@CurrentUser() currentUser: any) {
       const user = await this.usersService.findById(currentUser.id);
       
@@ -74,6 +77,20 @@ import {
         message: 'Профиль получен',
       };
     }
+
+    @Put('me/profile')
+    @UseGuards(AccessTokenGuard)
+    async changeMyProfile(@CurrentUser() currentUser: any, @Body() data: any) {
+      console.log(currentUser)
+      console.log(data)
+      const user = await this.usersService.update(currentUser.id, data);
+
+      return {
+        success: true,
+        data: user,
+        message: 'Профиль изменён',
+      };
+    }
   
     /**
      * Получение постов пользователя
@@ -81,6 +98,7 @@ import {
      * Доступно всем
      */
     @Get(':id/posts')
+    @UseGuards(AccessTokenGuard)
     async getUserPosts(
       @Param('id') id: string,
       @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
@@ -107,6 +125,7 @@ import {
      * GET /api/users/search?username=...
      */
     @Get('search')
+    @UseGuards(AccessTokenGuard)
     async searchUsers(@Param('username') username: string) {
       if (!username) {
         return {
