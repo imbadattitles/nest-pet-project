@@ -111,7 +111,7 @@ import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
       }
   
       // Получаем посты пользователя
-      const posts = await this.postsService.findByUserId(id, page, limit);
+      const posts = await this.postsService.findByAuthor(id, page, limit);
       
       return {
         success: true,

@@ -1,16 +1,27 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, HydratedDocument } from 'mongoose';
 import { Post, PostDocument } from './schemas/post.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { CommentsService } from '../comments/comments.service';
+import { 
+  IPostWithComments, 
+  IAuthor, 
+  ICommentWithAuthor,
+  IApiResponse 
+} from './interfaces/post-with-comments.interface';
 
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
+    private commentsService: CommentsService,
   ) {}
 
+  /**
+   * Создание поста
+   */
   async create(createPostDto: CreatePostDto, authorId: string): Promise<PostDocument> {
     const post = new this.postModel({
       ...createPostDto,
@@ -19,6 +30,9 @@ export class PostsService {
     return post.save();
   }
 
+  /**
+   * Получение всех постов с пагинацией
+   */
   async findAll(page = 1, limit = 10, search?: string, authorId?: string) {
     const skip = (page - 1) * limit;
 
@@ -35,11 +49,11 @@ export class PostsService {
     const [posts, total] = await Promise.all([
       this.postModel
         .find(query)
-        .populate('author', 'username email')
+        .populate<{ author: IAuthor }>('author', 'username email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .exec(),
+        .lean(),
       this.postModel.countDocuments(query),
     ]);
 
@@ -56,6 +70,9 @@ export class PostsService {
     };
   }
 
+  /**
+   * Получение одного поста
+   */
   async findOne(id: string): Promise<PostDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Неверный формат ID поста');
@@ -64,6 +81,7 @@ export class PostsService {
     const post = await this.postModel
       .findById(id)
       .populate('author', 'username email')
+      .lean()
       .exec();
 
     if (!post) {
@@ -73,10 +91,44 @@ export class PostsService {
     return post;
   }
 
-  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PostDocument> {
-    const post = await this.findOne(id);
+  /**
+   * Получение поста с комментариями (с явным типом)
+   */
+  async findOneWithComments(
+    id: string, 
+    page = 1, 
+    limit = 20
+  ): Promise<IPostWithComments> {
+    // Получаем пост
+    const post = await this.findOne(id) as any;
 
-    if (post.author._id.toString() !== userId) {
+    // Получаем комментарии к посту
+    const comments = await this.commentsService.getPostComments(id, page, limit, 'newest');
+
+    // Формируем ответ с правильным типом
+    const result: IPostWithComments = {
+      ...post,
+      author: post.author as IAuthor,
+      comments: {
+        comments: comments.comments,
+        pagination: comments.pagination,
+      },
+    };
+
+    return result;
+  }
+
+  /**
+   * Обновление поста
+   */
+  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PostDocument> {
+    const post = await this.postModel.findById(id);
+
+    if (!post) {
+      throw new NotFoundException('Пост не найден');
+    }
+
+    if (post.author.toString() !== userId) {
       throw new ForbiddenException('Нет прав для редактирования этого поста');
     }
 
@@ -84,27 +136,37 @@ export class PostsService {
     return post.save();
   }
 
+  /**
+   * Удаление поста
+   */
   async remove(id: string, userId: string): Promise<void> {
-    const post = await this.findOne(id);
+    const post = await this.postModel.findById(id);
 
-    if (post.author._id.toString() !== userId) {
+    if (!post) {
+      throw new NotFoundException('Пост не найден');
+    }
+
+    if (post.author.toString() !== userId) {
       throw new ForbiddenException('Нет прав для удаления этого поста');
     }
 
     await post.deleteOne();
   }
 
+  /**
+   * Получение постов автора
+   */
   async findByAuthor(authorId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
     const [posts, total] = await Promise.all([
       this.postModel
         .find({ author: new Types.ObjectId(authorId) })
-        .populate('author', 'username email')
+        .populate<{ author: IAuthor }>('author', 'username email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .exec(),
+        .lean(),
       this.postModel.countDocuments({ author: new Types.ObjectId(authorId) }),
     ]);
 
@@ -118,28 +180,12 @@ export class PostsService {
       },
     };
   }
-  async findByUserId(userId: string, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
-  
-    const [posts, total] = await Promise.all([
-      this.postModel
-        .find({ author: new Types.ObjectId(userId) })
-        .populate('author', 'username email')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.postModel.countDocuments({ author: new Types.ObjectId(userId) }),
-    ]);
-  
-    return {
-      posts,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    };
+
+  /**
+   * Обновление счетчика комментариев
+   */
+  async updateCommentsCount(postId: string): Promise<void> {
+    const count = await this.commentsService.getCommentsCount(postId);
+    await this.postModel.findByIdAndUpdate(postId, { commentsCount: count });
   }
 }

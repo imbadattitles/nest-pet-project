@@ -28,9 +28,22 @@ export class Post extends Document {
     required: [true, 'Автор обязателен'],
   })
   author: Types.ObjectId;
+
+  @Prop({
+    default: 0,
+  })
+  commentsCount: number; // Денормализованное поле для быстрого подсчета
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
+
+// Виртуальное поле для получения комментариев
+PostSchema.virtual('comments', {
+  ref: 'Comment',
+  localField: '_id',
+  foreignField: 'post',
+  options: { sort: { createdAt: -1 } },
+});
 
 // Индексы для оптимизации запросов
 PostSchema.index({ author: 1, createdAt: -1 });
