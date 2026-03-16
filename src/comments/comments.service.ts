@@ -63,15 +63,10 @@ export class CommentsService {
       isDeleted: false,
     };
 
-    const [comments, total] = await Promise.all([
+    const [rootComments, total] = await Promise.all([
       this.commentModel
         .find(query)
         .populate('author', 'username email avatar')
-        .populate({
-          path: 'replies',
-          populate: { path: 'author', select: 'username email avatar' },
-          options: { sort: { createdAt: 1 } },
-        })
         .sort(sort)
         .skip(skip)
         .limit(limit)
@@ -79,8 +74,13 @@ export class CommentsService {
       this.commentModel.countDocuments(query),
     ]);
 
+    // Для каждого корневого комментария рекурсивно получаем все ответы
+    const commentsWithReplies = await Promise.all(
+      rootComments.map(comment => this.buildCommentTree(comment)),
+    );
+
     return {
-      comments,
+      comments: commentsWithReplies,
       pagination: {
         page,
         limit,
@@ -89,6 +89,41 @@ export class CommentsService {
         hasNext: page < Math.ceil(total / limit),
         hasPrev: page > 1,
       },
+    };
+  }
+
+  /**
+   * Рекурсивное построение дерева комментариев
+   */
+  private async buildCommentTree(comment: any, depth: number = 0): Promise<any> {
+    // Защита от бесконечной рекурсии (макс глубина 10)
+    if (depth > 10) {
+      return {
+        ...comment,
+        replies: [],
+        _hasMoreReplies: true, // Флаг, что есть еще ответы
+      };
+    }
+
+    // Получаем прямые ответы на этот комментарий
+    const replies = await this.commentModel
+      .find({
+        parentComment: comment._id,
+        isDeleted: false,
+      })
+      .populate('author', 'username email avatar')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Рекурсивно получаем ответы на ответы
+    const repliesWithNested = await Promise.all(
+      replies.map(reply => this.buildCommentTree(reply, depth + 1)),
+    );
+
+    return {
+      ...comment,
+      replies: repliesWithNested,
+      _replyCount: repliesWithNested.length,
     };
   }
 
