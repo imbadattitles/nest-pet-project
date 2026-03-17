@@ -3,9 +3,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { join } from 'path';
+import * as express from 'express';
+import { CleanMongooseInterceptor } from './common/interceptors/clean-mongoose.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Раздаем статические файлы
+  app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
   const configService = app.get(ConfigService);
   const port = configService.get<number>('port') || 5000;
 
@@ -17,6 +22,8 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // app.useGlobalInterceptors(new CleanMongooseInterceptor())
 
   // Cookie parser middleware
   app.use(cookieParser());

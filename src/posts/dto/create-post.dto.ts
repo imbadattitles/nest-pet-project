@@ -1,4 +1,4 @@
-import { IsString, MinLength, MaxLength } from 'class-validator';
+import { IsString, MinLength, MaxLength, IsOptional } from 'class-validator';
 
 export class CreatePostDto {
   @IsString()
@@ -9,4 +9,8 @@ export class CreatePostDto {
   @IsString()
   @MinLength(10, { message: 'Содержание должно быть минимум 10 символов' })
   content: string;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string
 }

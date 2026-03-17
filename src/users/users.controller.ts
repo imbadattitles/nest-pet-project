@@ -9,14 +9,20 @@ import {
     DefaultValuePipe,
     ParseIntPipe,
     Put,
-    Body
+    Body,
+    Post,
+    UseInterceptors,
+    UploadedFile
   } from '@nestjs/common';
   import { UsersService } from './users.service';
   import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
   import { CurrentUser } from '../common/decorators/current-user.decorator';
   import { PostsService } from 'src/posts/posts.service';
-import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
-  
+  import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
+  import { diskStorage } from 'multer';
+  import { extname } from 'path';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { editFileName, imageFileFilter } from 'src/common/imageHelper';
   @Controller('users')
   export class UsersController {
     constructor(
@@ -91,6 +97,34 @@ import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
         message: 'Профиль изменён',
       };
     }
+
+    @Post('me/profile/avatar')
+    @UseGuards(AccessTokenGuard)
+    @UseInterceptors(FileInterceptor('avatar', {
+      storage: diskStorage({
+        destination: './uploads/avatars',
+        filename: editFileName,
+      }),
+      fileFilter: imageFileFilter,
+      limits: {
+        files: 1,
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+    }))
+    async uploadAvatarLocal(
+      @UploadedFile() file: Express.Multer.File,
+      @CurrentUser() user: any,
+    ) {
+      const avatarUrl = `/uploads/avatars/${file.filename}`;
+      
+      await this.usersService.update(user.id, { avatar: avatarUrl });
+
+      return {
+        success: true,
+        url: avatarUrl,
+        message: 'Avatar uploaded successfully',
+      };
+    }
   
     /**
      * Получение постов пользователя
@@ -119,6 +153,7 @@ import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
         message: `Посты пользователя ${user.username}`,
       };
     }
+
   
     /**
      * Поиск пользователей по username

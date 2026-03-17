@@ -30,6 +30,11 @@ export class Post extends Document {
   author: Types.ObjectId;
 
   @Prop({
+    default: null
+  })
+  imageUrl: string;
+
+  @Prop({
     default: 0,
   })
   commentsCount: number; // Денормализованное поле для быстрого подсчета

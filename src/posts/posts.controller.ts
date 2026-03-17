@@ -11,11 +11,16 @@ import {
   Query,
   ParseIntPipe,
   DefaultValuePipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { editFileName, imageFileFilter } from 'src/common/imageHelper';
 
 @Controller('posts')
 export class PostsController {
@@ -23,7 +28,21 @@ export class PostsController {
 
   @Post()
   @UseGuards(AccessTokenGuard)
-  create(@Body() createPostDto: CreatePostDto, @Req() req) {
+  @UseInterceptors(FileInterceptor('image', {
+    storage: diskStorage({
+      destination: './uploads/posts',
+      filename: editFileName,
+    }),
+    fileFilter: imageFileFilter,
+    limits: {
+      files: 1,
+      fileSize: 5 * 1024 * 1024, // 5MB
+    },
+  }))
+  create(@Body() createPostDto: CreatePostDto, @UploadedFile() file: Express.Multer.File, @Req() req) {
+    if (file) {
+      createPostDto.imageUrl = `/uploads/posts/${file.filename}`
+    }
     return this.postsService.create(createPostDto, req.user.id);
   }
 

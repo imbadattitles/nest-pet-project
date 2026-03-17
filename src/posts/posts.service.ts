@@ -22,14 +22,30 @@ export class PostsService {
   /**
    * Создание поста
    */
-  async create(createPostDto: CreatePostDto, authorId: string): Promise<PostDocument> {
+  async create(createPostDto: CreatePostDto, authorId: string) {
     const post = new this.postModel({
       ...createPostDto,
       author: new Types.ObjectId(authorId),
     });
-    return post.save();
+    
+    const savedPost = await post.save();
+    
+    // Если есть изображение, можно запустить обработку (ресайз и т.д.)
+    if (createPostDto.imageUrl) {
+      // Асинхронно: создать миниатюры, оптимизировать и т.д.
+      this.processImage(savedPost._id.toString(), createPostDto.imageUrl);
+    }
+    
+    return savedPost;
   }
-
+  
+  private async processImage(postId: string, imageUrl: string) {
+    // Здесь можно:
+    // 1. Создать миниатюру
+    // 2. Оптимизировать размер
+    // 3. Загрузить в S3 вместо локального хранения
+    // 4. Обновить пост с новыми ссылками
+  }
   /**
    * Получение всех постов с пагинацией
    */
