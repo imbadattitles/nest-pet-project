@@ -1,3 +1,4 @@
+import { AppGateway } from './../gateway/app.gateway';
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -9,6 +10,7 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
+    private appGateway: AppGateway
   ) {}
 
   /**
@@ -37,7 +39,15 @@ export class CommentsService {
         : null,
     });
 
-    return comment.save();
+    const savedComment = await comment.save();
+    
+    // Загружаем автора для отправки
+    await savedComment.populate('author', 'username email avatar');
+    
+    // Отправляем через WebSocket
+    this.appGateway.sendNewComment(createCommentDto.postId, savedComment);
+    
+    return savedComment;
   }
 
   /**

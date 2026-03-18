@@ -6,6 +6,7 @@ import { AppModule } from './app.module';
 import { join } from 'path';
 import * as express from 'express';
 import { CleanMongooseInterceptor } from './common/interceptors/clean-mongoose.interceptor';
+import { UrlTransformerInterceptor } from './common/interceptors/url-transformer.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,7 +24,7 @@ async function bootstrap() {
     }),
   );
 
-  // app.useGlobalInterceptors(new CleanMongooseInterceptor())
+  
 
   // Cookie parser middleware
   app.use(cookieParser());
@@ -38,7 +39,10 @@ async function bootstrap() {
 
   // Глобальный префикс
   app.setGlobalPrefix('api');
-
+    app.useGlobalInterceptors(
+    // new CleanMongooseInterceptor(),     // 1. Сначала чистим Mongoose
+    new UrlTransformerInterceptor(configService) // 2. Потом добавляем URL
+  );
   await app.listen(port);
   console.log(`🚀 Сервер запущен на порту ${port}`);
   console.log(`📍 http://localhost:${port}/api`);

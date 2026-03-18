@@ -1,11 +1,12 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
-import { map, Observable } from "rxjs";
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @Injectable()
 export class CleanMongooseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     return next.handle().pipe(
-      map(data => this.cleanDocument(data)) // чистим данные
+      map(data => this.cleanDocument(data))
     );
   }
 
@@ -26,7 +27,12 @@ export class CleanMongooseInterceptor implements NestInterceptor {
     const cleaned = {};
     for (const key in doc) {
       if (doc.hasOwnProperty(key) && !key.startsWith('$') && key !== '_doc') {
-        cleaned[key] = this.cleanDocument(doc[key]);
+        // Конвертируем _id в строку
+        // if (key === '_id') {
+          // cleaned['id'] = doc[key].toString();
+        // } else {
+          cleaned[key] = this.cleanDocument(doc[key]);
+        // }
       }
     }
     return cleaned;

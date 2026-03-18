@@ -1,4 +1,7 @@
 export default () => ({
+  app: {
+    url: process.env.APP_URL || 'http://localhost:5000',
+  },
   port: parseInt(process.env.PORT as string, 10 ) || 5000,
   database: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/nest-blog',
