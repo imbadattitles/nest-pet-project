@@ -87,8 +87,8 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
     @Put('me/profile')
     @UseGuards(AccessTokenGuard)
     async changeMyProfile(@CurrentUser() currentUser: any, @Body() data: any) {
-      console.log(currentUser)
-      console.log(data)
+      // console.log(currentUser)
+      // console.log(data)
       const user = await this.usersService.update(currentUser.id, data);
 
       return {

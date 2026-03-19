@@ -15,7 +15,7 @@ export class WsJwtGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
     const client: Socket = context.switchToWs().getClient();
-    
+    console.log('asdasdada')
     try {
       const token = this.extractToken(client);
       

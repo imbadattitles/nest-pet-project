@@ -4,12 +4,12 @@ import { CommentsService } from './comments.service';
 import { CommentsController } from './comments.controller';
 import { Comment, CommentSchema } from './schemas/comment.schema';
 import { AppGateway } from 'src/gateway/app.gateway';
-import { GatewayModule } from 'src/gateway/gateway.module';
+// import { GatewayModule } from 'src/gateway/gateway.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Comment.name, schema: CommentSchema }]),
-    GatewayModule
+    // GatewayModule
   ],
   controllers: [CommentsController],
   providers: [CommentsService],

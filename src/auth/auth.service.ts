@@ -110,7 +110,7 @@ export class AuthService {
    */
   async refreshTokens(req: Request, res: Response) {
     const refreshToken = req.cookies?.refresh_token;
-    console.log(refreshToken);
+    // console.log(refreshToken);
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token не найден');
     }

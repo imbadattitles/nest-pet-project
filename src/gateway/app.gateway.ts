@@ -10,6 +10,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from '../auth/guards/auth-jwt.guard';
+import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
+import { JwtWsService } from 'src/auth/strategies/jwt-ws.service';
 
 @WebSocketGateway({
   cors: {
@@ -18,6 +20,7 @@ import { WsJwtGuard } from '../auth/guards/auth-jwt.guard';
   },
   namespace: 'events', // Один общий namespace
 })
+
 export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -26,36 +29,53 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private userSockets = new Map<string, string[]>(); // userId → socketIds[]
   private onlineUsers = new Set<string>();
 
+  constructor(private jwtWsService: JwtWsService) {}
+
+  // @UseGuards(AccessTokenGuard)
   async handleConnection(client: Socket) {
     try {
-      // Аутентификация
-      const user = await this.authenticate(client);
-      if (!user) {
+      console.log('Client connecting:', client.id);
+      console.log('Cookies:', client.handshake.headers.cookie);
+
+      // Извлекаем токен из куки
+      const cookies = client.handshake.headers.cookie;
+      if (!cookies) {
+        console.log('No cookies, disconnecting');
         client.disconnect();
         return;
       }
 
-      // Сохраняем соединение
-      const userId = user.id;
-      const userSockets = this.userSockets.get(userId) || [];
-      this.userSockets.set(userId, [...userSockets, client.id]);
-      
-      // Отмечаем пользователя онлайн
-      if (!this.onlineUsers.has(userId)) {
-        this.onlineUsers.add(userId);
-        this.broadcastUserStatus(userId, true);
+      const accessToken = this.extractTokenFromCookie(cookies);
+      if (!accessToken) {
+        console.log('No access token, disconnecting');
+        client.disconnect();
+        return;
       }
 
+      // Валидируем токен через наш сервис
+      const user = await this.jwtWsService.validateToken(accessToken);
+      
+      // Сохраняем пользователя в данных сокета
       client.data.user = user;
-      this.logger.log(`✅ User ${userId} connected [${client.id}]`);
       
-      // Отправляем список онлайн пользователей
-      client.emit('onlineUsers', Array.from(this.onlineUsers));
+      console.log('Client authenticated:', client.id, user);
       
+      // Можно отправить событие об успешном подключении
+      client.emit('authenticated', { message: 'Connected successfully' });
+
     } catch (error) {
-      this.logger.error(`❌ Connection error: ${error.message}`);
+      console.log('Authentication failed:', error.message);
       client.disconnect();
     }
+  }
+  private extractTokenFromCookie(cookieString: string): string | null {
+    const cookies = cookieString.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    return cookies['access_token'] || null;
   }
 
   handleDisconnect(client: Socket) {
@@ -163,23 +183,4 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.emit('users:online', Array.from(this.onlineUsers));
   }
 
-  // ========== ХЕЛПЕРЫ ==========
-  private async authenticate(client: Socket) {
-    // Извлекаем токен
-    const token = client.handshake.auth.token || 
-                  client.handshake.headers.authorization?.split(' ')[1];
-    
-    if (!token) return null;
-    
-    try {
-      // Верифицируем токен (тут должна быть твоя логика)
-      // const payload = await this.jwtService.verifyAsync(token);
-      // return { id: payload.sub, username: payload.username };
-      
-      // Для примера возвращаем тестового пользователя
-      return { id: '123', username: 'test' };
-    } catch {
-      return null;
-    }
-  }
 }

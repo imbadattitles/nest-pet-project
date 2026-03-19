@@ -7,7 +7,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
-import { GatewayModule } from './gateway/gateway.module';
+import { WebsocketModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
@@ -39,7 +39,7 @@ import { GatewayModule } from './gateway/gateway.module';
     AuthModule,
     PostsModule,
     CommentsModule,
-    GatewayModule,
+    WebsocketModule,
   ],
 })
 export class AppModule {}

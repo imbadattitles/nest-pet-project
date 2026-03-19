@@ -19,7 +19,7 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
 
     super({
       jwtFromRequest: (req: Request) => {
-        console.log(req?.cookies?.refresh_token);
+        // console.log(req?.cookies?.refresh_token);
         return req?.cookies?.refresh_token;
       },
       passReqToCallback: true,
@@ -28,16 +28,16 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
   }
 
   async validate(req: Request, payload: any) {
-    console.log('asdasd')
+    // console.log('asdasd')
     const refreshToken = req.cookies?.refresh_token;
-    console.log(refreshToken);
+    // console.log(refreshToken);
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token not found');
     }
 
     // Проверяем валидность refresh токена в БД
     const userId = await this.refreshTokenService.validateRefreshToken(refreshToken);
-    console.log(userId)
+    // console.log(userId)
     return {
       id: userId,
       email: payload.email,
