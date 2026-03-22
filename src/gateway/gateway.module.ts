@@ -1,9 +1,11 @@
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, forwardRef } from '@nestjs/common';
 import { AppGateway } from './app.gateway';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtWsService } from '../auth/strategies/jwt-ws.service';
-import { UsersModule } from 'src/users/users.module';
+import { UsersModule } from '../users/users.module';
+import { PostsModule } from 'src/posts/posts.module';
+import { CommentsModule } from 'src/comments/comments.module';
 
 @Global()
 @Module({
@@ -21,7 +23,9 @@ import { UsersModule } from 'src/users/users.module';
       },
       inject: [ConfigService],
     }),
-    UsersModule, // 👈 КЛЮЧЕВОЙ МОМЕНТ: добавляем UsersModule в imports
+    forwardRef(() => UsersModule), // 👈 КЛЮЧЕВОЙ МОМЕНТ: добавляем UsersModule в imports
+    forwardRef(() => PostsModule),
+    forwardRef(() => CommentsModule)
   ],
   providers: [
     AppGateway,

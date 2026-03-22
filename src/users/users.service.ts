@@ -1,3 +1,5 @@
+import { AppGateway } from './../gateway/app.gateway';
+import { CurrentUser } from './../common/decorators/current-user.decorator';
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -7,6 +9,7 @@ import { User, UserDocument } from './schemas/user.schema';
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private AppGateway: AppGateway
   ) {}
 
   async create(createUserDto: { email: string; username: string; password: string }): Promise<UserDocument> {
@@ -30,6 +33,60 @@ export class UsersService {
 
   async findById(id: string): Promise<UserDocument | null> {
     return this.userModel.findById(id).exec();
+  }
+
+  async findMyProfile(id: string): Promise<UserDocument | null> {
+    return this.userModel.findById(id).select('+contacts').exec();
+  }
+
+  async getMyContacts(currentUser: any): Promise<{ success: boolean; data: string[]; message: string }> {
+    const user = await this.findById(currentUser.id);
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    return {
+      success: true,
+      data: user.contacts, // Возвращаем только список контактов
+      message: 'контакты получены',
+    };
+  }
+
+  async addContact(currentUser:{ id: string }, data: { userId: string }): Promise<{ success: boolean; data: string[]; message: string }> {
+    const user = await this.findMyProfile(currentUser.id);
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+    console.log(user)
+    if (!user.contacts.includes(data.userId)) {
+      user.contacts.push(data.userId);
+      this.AppGateway.sendNotification(data.userId, `У вас новый подписчик: ${currentUser.id}`);
+      await user.save();
+    }
+
+    return {
+      success: true,
+      data: user.contacts,
+      message: 'Контакт добавлен',
+    };
+  }
+
+  async removeContact(currentUser:{ id: string }, data: { userId: string }): Promise<{ success: boolean; data: string[]; message: string }> {
+    const user = await this.findMyProfile(currentUser.id);
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+    console.log(user)
+    if (user.contacts.includes(data.userId)) {
+      user.contacts = user.contacts.filter((id: string) => id !== data.userId);
+      await user.save();
+    }
+
+    return {
+      success: true,
+      data: user.contacts,
+      message: 'Контакт удален',
+    };
   }
 
   async findByUsername(username: string): Promise<UserDocument | null> {

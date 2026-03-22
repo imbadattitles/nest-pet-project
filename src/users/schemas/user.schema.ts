@@ -41,6 +41,13 @@ export class User extends Document {
     required: false
   })
   avatar: string
+
+  @Prop({
+    type: [String],
+    default: [],
+    select: false,
+  })
+  contacts: string[]; // Список ID друзей или контактов
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

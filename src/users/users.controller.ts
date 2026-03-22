@@ -12,7 +12,8 @@ import {
     Body,
     Post,
     UseInterceptors,
-    UploadedFile
+    UploadedFile,
+    Delete
   } from '@nestjs/common';
   import { UsersService } from './users.service';
   import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -66,6 +67,25 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
         message: 'Пользователь получен',
       };
     }
+
+    @Get('me/contacts')
+    @UseGuards(AccessTokenGuard)
+    async getMyContacts(@CurrentUser() currentUser: any) {
+      return await this.usersService.getMyContacts(currentUser);
+    }
+
+    @Post('me/contacts')
+    @UseGuards(AccessTokenGuard)
+    async addContact(@CurrentUser() currentUser: any, @Body() data: { userId: string }) {
+      return await this.usersService.addContact(currentUser, data);
+    }
+
+    @Delete('me/contacts')
+    @UseGuards(AccessTokenGuard)
+    async removeContact(@CurrentUser() currentUser: any, @Body() data: { userId: string }) {
+      return await this.usersService.removeContact(currentUser, data);
+    }
+
   
     /**
      * Получение текущего пользователя
@@ -75,7 +95,7 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
     @Get('me/profile')
     @UseGuards(AccessTokenGuard)
     async getMyProfile(@CurrentUser() currentUser: any) {
-      const user = await this.usersService.findById(currentUser.id);
+      const user = await this.usersService.findMyProfile(currentUser.id);
       
       return {
         success: true,

@@ -1,5 +1,5 @@
 import { AppGateway } from './../gateway/app.gateway';
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Comment, CommentDocument } from './schemas/comment.schema';
@@ -10,7 +10,7 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
-    private appGateway: AppGateway
+      @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway
   ) {}
 
   /**

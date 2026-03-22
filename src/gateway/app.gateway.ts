@@ -1,3 +1,4 @@
+import { PostsService } from './../posts/posts.service';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -8,10 +9,12 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { forwardRef, Inject, Logger, UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from '../auth/guards/auth-jwt.guard';
 import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
 import { JwtWsService } from 'src/auth/strategies/jwt-ws.service';
+import { UsersService } from 'src/users/users.service';
+import { CommentsService } from 'src/comments/comments.service';
 
 @WebSocketGateway({
   cors: {
@@ -29,42 +32,87 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private userSockets = new Map<string, string[]>(); // userId → socketIds[]
   private onlineUsers = new Set<string>();
 
-  constructor(private jwtWsService: JwtWsService) {}
+    constructor(
+    private jwtWsService: JwtWsService,
+    @Inject(forwardRef(() => PostsService))
+    private postsService: PostsService,
+    @Inject(forwardRef(() => CommentsService))
+    private commentsService: CommentsService,
+    @Inject(forwardRef(() => UsersService))
+    private usersService: UsersService,
+  ) {}
+  // private intervalId: NodeJS.Timeout;
+  // private messageCount = 0;
 
+  afterInit(server: Server) {
+    this.logger.log('✅ WebSocket инициализирован');
+    // console
+    
+    // Запускаем интервал после инициализации сервера
+    // this.intervalId = setInterval(() => {
+    //   this.messageCount++;
+      
+    //   // Отправляем всем подключенным клиентам
+    //   this.server.emit('periodic-message', {
+    //     id: this.messageCount,
+    //     message: `Привет от сервера! Сообщение #${this.messageCount}`,
+    //     timestamp: new Date().toISOString(),
+    //     randomNumber: Math.floor(Math.random() * 100),
+    //   });
+      
+    //   this.logger.log(`📨 Отправлено сообщение #${this.messageCount}`);
+    // }, 5000); // 5000ms = 5 секунд
+  }
   // @UseGuards(AccessTokenGuard)
   async handleConnection(client: Socket) {
     try {
-      console.log('Client connecting:', client.id);
-      console.log('Cookies:', client.handshake.headers.cookie);
+
 
       // Извлекаем токен из куки
       const cookies = client.handshake.headers.cookie;
       if (!cookies) {
-        console.log('No cookies, disconnecting');
         client.disconnect();
         return;
       }
 
       const accessToken = this.extractTokenFromCookie(cookies);
       if (!accessToken) {
-        console.log('No access token, disconnecting');
         client.disconnect();
         return;
       }
 
       // Валидируем токен через наш сервис
-      const user = await this.jwtWsService.validateToken(accessToken);
-      
+      const user: {
+        id: string;
+        username: string;
+        email: string;
+        contacts?: string[];
+      } = await this.jwtWsService.validateToken(accessToken);
+      const userFromService = await this.usersService.findMyProfile(user.id);
+
+      if (!userFromService) {
+        client.disconnect();
+        return;
+      }
+      user.contacts = userFromService.contacts; // Добавляем контакты в данные пользователя
       // Сохраняем пользователя в данных сокета
       client.data.user = user;
+
+      const posts = await this.postsService.findByAuthor(user.id);
+      for (const post of posts.posts) {
+        console.log(`📌 Client ${client.id} joined room for post ${post._id}`);
+        client.join(`post:${post._id}`);
+      }
+      for (const contactId of user.contacts || []) {
+        console.log(`📌 Client ${client.id} joined room for contact ${contactId}`);
+        client.join(`contact:${contactId}`);
+      }
       
-      console.log('Client authenticated:', client.id, user);
       
       // Можно отправить событие об успешном подключении
       client.emit('authenticated', { message: 'Connected successfully' });
 
     } catch (error) {
-      console.log('Authentication failed:', error.message);
       client.disconnect();
     }
   }
@@ -120,6 +168,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Отправка нового комментария
   sendNewComment(postId: string, comment: any) {
+    console.log(`🔔 Sending new comment to post ${postId}:`, comment);
     this.server.to(`post:${postId}`).emit('posts:newComment', {
       postId,
       comment,
@@ -135,7 +184,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ========== УВЕДОМЛЕНИЯ ==========
   @SubscribeMessage('notifications:subscribe')
   handleSubscribeToNotifications(@ConnectedSocket() client: Socket) {
-    const userId = client.data.user.id;
+    const userId = client.id;
     client.join(`user:${userId}`);
     this.logger.log(`🔔 User ${userId} subscribed to notifications`);
   }
