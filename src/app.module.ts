@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
 import { WebsocketModule } from './gateway/gateway.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { WebsocketModule } from './gateway/gateway.module';
     PostsModule,
     CommentsModule,
     WebsocketModule,
+    ChatModule
   ],
 })
 export class AppModule {}
