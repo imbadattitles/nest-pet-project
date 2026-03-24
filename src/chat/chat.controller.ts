@@ -10,12 +10,12 @@ import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  @Get('conversations')
-  async getConversations(@Req() req) {
-    return this.chatService.getUserConversations(req.user.id);
+  @Get()
+  async getDialogs(@Req() req) {
+    return this.chatService.getUserDialogs(req.user.id);
   }
 
-  @Post('conversations/private/:userId')
+  @Post(':userId')
   async createPrivateChat(@Req() req, @Param('userId') userId: string) {
     return this.chatService.createPrivateChat(
       req.user.id,
@@ -28,15 +28,15 @@ export class ChatController {
     return this.chatService.createGroupChat(req.user.id, dto);
   }
 
-  @Get('conversations/:conversationId/messages')
+  @Get(':dialogId/messages')
   async getMessages(
     @Req() req,
-    @Param('conversationId') conversationId: string,
+    @Param('dialogId') dialogId: string,
     @Query('limit') limit?: number,
     @Query('before') before?: Date
   ) {
     return this.chatService.getMessages(
-      new Types.ObjectId(conversationId),
+      new Types.ObjectId(dialogId),
       req.user.id,
       limit,
       before
@@ -48,10 +48,10 @@ export class ChatController {
     return this.chatService.sendMessage(req.user.id, dto);
   }
 
-  @Patch('conversations/:conversationId/read')
-  async markAsRead(@Req() req, @Param('conversationId') conversationId: string) {
+  @Patch(':dialogId/read')
+  async markAsRead(@Req() req, @Param('dialogId') dialogId: string) {
     return this.chatService.markAsRead(
-      new Types.ObjectId(conversationId),
+      new Types.ObjectId(dialogId),
       req.user.id
     );
   }

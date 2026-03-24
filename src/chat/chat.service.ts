@@ -190,7 +190,7 @@ export class ChatService {
     return messages.reverse();
   }
 
-  async getUserConversations(userId: Types.ObjectId): Promise<any[]> {
+  async getUserDialogs(userId: Types.ObjectId): Promise<any[]> {
     const dialogs = await this.dialogModel.find({
       participants: userId,
       isActive: true
