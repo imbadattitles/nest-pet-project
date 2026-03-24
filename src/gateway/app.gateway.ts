@@ -104,6 +104,10 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.join(`post:${post._id}`);
       }
       for (const contactId of user.contacts || []) {
+        if (!contactId) {
+          await this.usersService.removeContact({ id: userFromService.id }, { userId: contactId })
+          continue;
+        };
         console.log(`📌 Client ${client.id} joined room for contact ${contactId}`);
         client.join(`contact:${contactId}`);
       }

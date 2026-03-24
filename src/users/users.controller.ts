@@ -1,3 +1,4 @@
+import { ChatService } from './../chat/chat.service';
 import { 
     Controller, 
     Get, 
@@ -28,7 +29,8 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
   export class UsersController {
     constructor(
         private readonly usersService: UsersService,
-        private readonly postsService: PostsService
+        private readonly postsService: PostsService,
+        private readonly ChatService: ChatService
     ) {}
   
     /**
@@ -94,12 +96,12 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
      */
     @Get('me/profile')
     @UseGuards(AccessTokenGuard)
-    async getMyProfile(@CurrentUser() currentUser: any) {
+    async getMyProfile(@CurrentUser() currentUser: any): Promise<{ success: boolean; data: any; message: string }> {
       const user = await this.usersService.findMyProfile(currentUser.id);
-      
+      const dialogs = await this.ChatService.getUserDialogs(currentUser.id);
       return {
         success: true,
-        data: user,
+        data: { ...user?.toObject(), dialogs },
         message: 'Профиль получен',
       };
     }

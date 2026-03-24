@@ -197,7 +197,7 @@ export class ChatService {
     })
     .populate('participants', 'username avatar online lastSeen')
     .populate('lastMessage')
-    .sort({ lastMessageTime: -1 });
+    .sort({ lastMessageTime: -1 }).exec();
     
     return dialogs.map(conv => {
       const otherUser = conv.type === 'private' 

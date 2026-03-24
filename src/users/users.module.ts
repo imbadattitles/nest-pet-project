@@ -5,12 +5,14 @@ import { UsersController } from './users.controller';
 import { User, UserSchema } from './schemas/user.schema';
 import { PostsModule } from 'src/posts/posts.module';
 import { WebsocketModule } from 'src/gateway/gateway.module';
+import { ChatModule } from 'src/chat/chat.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     PostsModule,
-    forwardRef(() => WebsocketModule)
+    forwardRef(() => WebsocketModule),
+    ChatModule
   ],
   controllers: [UsersController],
   providers: [UsersService],

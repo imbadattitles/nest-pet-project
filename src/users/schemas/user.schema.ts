@@ -46,6 +46,7 @@ export class User extends Document {
     type: [String],
     default: [],
     select: false,
+    ref: 'User',
   })
   contacts: string[]; // Список ID друзей или контактов
 }
