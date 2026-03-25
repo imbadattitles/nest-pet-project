@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { Types } from 'mongoose';
 import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('chat')
 @UseGuards(AccessTokenGuard)
@@ -44,8 +45,15 @@ export class ChatController {
   }
 
   @Post(':dialogId/messages')
-  async sendMessage(@Req() req, @Param('dialogId') dialogId: string, @Body() dto: CreateMessageDto) {
+  @UseInterceptors(FileInterceptor('attachments'))
+  async sendMessage(
+    @Req() req, 
+    @Param('dialogId') dialogId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: CreateMessageDto
+  ) {
     console.log(dto);
+    console.log(file);
     return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId)});
   }
 
