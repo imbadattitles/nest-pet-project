@@ -45,6 +45,7 @@ export class ChatController {
 
   @Post(':dialogId/messages')
   async sendMessage(@Req() req, @Param('dialogId') dialogId: string, @Body() dto: CreateMessageDto) {
+    console.log(dto);
     return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId)});
   }
 
