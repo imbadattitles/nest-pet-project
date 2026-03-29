@@ -15,6 +15,8 @@ import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
 import { JwtWsService } from 'src/auth/strategies/jwt-ws.service';
 import { UsersService } from 'src/users/users.service';
 import { CommentsService } from 'src/comments/comments.service';
+import { ChatService } from 'src/chat/chat.service';
+import { Dialog } from 'src/chat/schemas/dialog.schema';
 
 @WebSocketGateway({
   cors: {
@@ -40,6 +42,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private commentsService: CommentsService,
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
+    @Inject(forwardRef(() => ChatService))
+    private chatService: ChatService
   ) {}
   // private intervalId: NodeJS.Timeout;
   // private messageCount = 0;
@@ -80,7 +84,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.disconnect();
         return;
       }
-
+      
       // Валидируем токен через наш сервис
       const user: {
         id: string;
@@ -94,13 +98,21 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.disconnect();
         return;
       }
+      this.userSockets.set(user.id, [client.id]);
+      
+      client.join(`user:${user.id}`);
       user.contacts = userFromService.contacts; // Добавляем контакты в данные пользователя
       // Сохраняем пользователя в данных сокета
       client.data.user = user;
 
+      const dialogs = await this.chatService.getUserDialogs(user.id);
+      for (const dialog of dialogs) {
+        // console.log(`📌 Client ${client.id} joined room for dialog ${dialog._id}`);
+        client.join(`dialog:${dialog._id}`);
+      }
       const posts = await this.postsService.findByAuthor(user.id);
       for (const post of posts.posts) {
-        console.log(`📌 Client ${client.id} joined room for post ${post._id}`);
+        // console.log(`📌 Client ${client.id} joined room for post ${post._id}`);
         client.join(`post:${post._id}`);
       }
       for (const contactId of user.contacts || []) {
@@ -108,7 +120,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
           await this.usersService.removeContact({ id: userFromService.id }, { userId: contactId })
           continue;
         };
-        console.log(`📌 Client ${client.id} joined room for contact ${contactId}`);
+        // console.log(`📌 Client ${client.id} joined room for contact ${contactId}`);
         client.join(`contact:${contactId}`);
       }
       
@@ -120,6 +132,34 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.disconnect();
     }
   }
+private async addUserToRoom(userId: string, roomName: string, forceJoin: boolean = true) {
+  const userSockets = this.userSockets.get(userId) || [];
+  let joinedCount = 0;
+  
+  for (const socketId of userSockets) {
+    // @ts-ignore
+    const socket = this.server.sockets.get(socketId);
+    if (socket && socket.connected) {
+      // Проверяем, состоит ли уже в комнате (опционально)
+      const isAlreadyInRoom = socket.rooms.has(roomName);
+      
+      if (!isAlreadyInRoom || forceJoin) {
+        socket.join(roomName);
+        joinedCount++;
+        this.logger.debug(`✅ Added socket ${socketId} to room ${roomName}`);
+      } else {
+        this.logger.debug(`ℹ️ Socket ${socketId} already in room ${roomName}`);
+      }
+    }
+  }
+  
+  if (joinedCount > 0) {
+    this.logger.log(`✅ Added ${joinedCount} sockets of user ${userId} to room ${roomName}`);
+  }
+  
+  return joinedCount;
+}
+
   private extractTokenFromCookie(cookieString: string): string | null {
     const cookies = cookieString.split(';').reduce((acc, cookie) => {
       const [key, value] = cookie.trim().split('=');
@@ -172,7 +212,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Отправка нового комментария
   sendNewComment(postId: string, comment: any) {
-    console.log(`🔔 Sending new comment to post ${postId}:`, comment);
+    // console.log(`🔔 Sending new comment to post ${postId}:`, comment);
     this.server.to(`post:${postId}`).emit('posts:newComment', {
       postId,
       comment,
@@ -200,7 +240,22 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+
   // ========== ЧАТ ==========
+  async sendMessageToDialog(dialogId: string, message: any, dialog:Dialog) {
+    const promises = dialog.participants.map(participant => 
+      this.addUserToRoom(participant._id.toString(), `dialog:${dialogId}`)
+    );
+    
+    await Promise.all(promises);
+    this.server.to(`dialog:${dialogId}`).emit('chat:newMessage', {
+      dialogId,
+      message,
+      dialog,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   @SubscribeMessage('chat:message')
   handleChatMessage(
     @ConnectedSocket() client: Socket,

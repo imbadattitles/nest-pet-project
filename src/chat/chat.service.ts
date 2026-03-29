@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Dialog, DialogDocument } from './schemas/dialog.schema';
@@ -6,6 +6,7 @@ import { Message, MessageDocument } from './schemas/message.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateMessageDto } from './dto/create-message.dto';
 import {CreateGroupDto} from './dto/create-group.dto';
+import { AppGateway } from 'src/gateway/app.gateway';
 
 @Injectable()
 export class ChatService {
@@ -13,6 +14,7 @@ export class ChatService {
     @InjectModel(Dialog.name) private dialogModel: Model<DialogDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway
   ) {}
 
   async createPrivateChat(userId1: Types.ObjectId, userId2: Types.ObjectId): Promise<DialogDocument> {
@@ -110,6 +112,7 @@ export class ChatService {
     
     await message.save();
     
+
     // Обновляем диалог
     dialog.lastMessage = message._id;
     dialog.lastMessageText = dto.text || '[Вложение]';
@@ -125,8 +128,12 @@ export class ChatService {
     }
     
     await dialog.save();
+
+    const mes = await message.populate('sender', 'username avatar')
+    const dial = await dialog.populate('lastMessage')
+    await this.appGateway.sendMessageToDialog(dialog._id.toString(), mes, dial);
     
-    return message.populate('senderId', 'username avatar');
+    return mes
   }
 
   async markAsRead(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
@@ -181,7 +188,7 @@ export class ChatService {
     }
     
     const messages = await this.messageModel.find(query)
-      .populate('senderId', 'username avatar')
+      .populate('sender', 'username avatar')
       .populate('replyTo')
       .populate('mentions', 'username')
       .sort({ createdAt: -1 })
@@ -190,7 +197,7 @@ export class ChatService {
     return messages.reverse();
   }
 
-  async getUserDialogs(userId: Types.ObjectId): Promise<any[]> {
+  async getUserDialogs(userId: string): Promise<any[]> {
     const dialogs = await this.dialogModel.find({
       participants: userId,
       isActive: true
@@ -210,13 +217,35 @@ export class ChatService {
         groupName: conv.groupName,
         groupAvatar: conv.groupAvatar,
         withUser: otherUser,
-        participants: conv.type === 'group' ? conv.participants : undefined,
+        participants:  conv.participants ,
         lastMessage: conv.lastMessage,
         lastMessageTime: conv.lastMessageTime,
         unreadCount: conv.unreadCount.get(userId.toString()) || 0,
         updatedAt: conv.updatedAt
       };
     });
+  }
+
+  async getDialogById(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<DialogDocument> {
+    // console.log('Getting dialog by ID:', dialogId, 'for user:', userId);
+    const dialog = await this.dialogModel.findById(dialogId)
+      .populate('participants', 'username avatar online lastSeen')
+      .populate('lastMessage');
+    // console.log('Found dialog:', dialog);
+    if (!dialog) {
+      throw new NotFoundException('Dialog not found');
+    }
+
+    // Проверяем, является ли пользователь участником диалога
+    const userObjectId = new Types.ObjectId(userId);
+    const isParticipant = dialog.participants.some(p => 
+      Types.ObjectId.isValid(p._id) && new Types.ObjectId(p._id).equals(userObjectId)
+    );
+    if (!isParticipant) {
+      throw new ForbiddenException('Access denied');
+    }
+    
+    return dialog;
   }
 
   private async sendSystemMessage(

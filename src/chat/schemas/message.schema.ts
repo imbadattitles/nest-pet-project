@@ -80,6 +80,15 @@ export class Message {
 }
 
 export const MessageSchema = SchemaFactory.createForClass(Message);
+// Включаем виртуальные поля при преобразовании в JSON/объект
+MessageSchema.set('toJSON', { virtuals: true });
+MessageSchema.set('toObject', { virtuals: true });
+MessageSchema.virtual('sender', {
+  ref: 'User',           // ссылаемся на модель User
+  localField: 'senderId', // поле в текущей модели
+  foreignField: '_id',    // поле в модели User
+  justOne: true          // так как это один пользователь, а не массив
+});
 
 // Индексы
 MessageSchema.index({ dialogId: 1, createdAt: -1 });

@@ -29,6 +29,11 @@ export class ChatController {
     return this.chatService.createGroupChat(req.user.id, dto);
   }
 
+  @Get(':dialogId')
+  async getDialog(@Req() req, @Param('dialogId') dialogId: string) {
+    return this.chatService.getDialogById(new Types.ObjectId(dialogId), req.user.id);
+  }
+
   @Get(':dialogId/messages')
   async getMessages(
     @Req() req,
@@ -52,8 +57,8 @@ export class ChatController {
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: CreateMessageDto
   ) {
-    console.log(dto);
-    console.log(file);
+    // console.log(dto);
+    // console.log(file);
     return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId)});
   }
 

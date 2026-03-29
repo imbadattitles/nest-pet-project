@@ -57,7 +57,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
-    console.log(user)
+    // console.log(user)
     if (!user.contacts.includes(data.userId)) {
       user.contacts.push(data.userId);
       this.AppGateway.sendNotification(data.userId, `У вас новый подписчик: ${currentUser.id}`);
@@ -76,7 +76,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
-    console.log(user)
+    // console.log(user)
     if (user.contacts.includes(data.userId)) {
       user.contacts = user.contacts.filter((id: string) => id !== data.userId);
       await user.save();

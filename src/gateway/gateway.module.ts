@@ -6,6 +6,7 @@ import { JwtWsService } from '../auth/strategies/jwt-ws.service';
 import { UsersModule } from '../users/users.module';
 import { PostsModule } from 'src/posts/posts.module';
 import { CommentsModule } from 'src/comments/comments.module';
+import { ChatModule } from 'src/chat/chat.module';
 
 @Global()
 @Module({
@@ -15,7 +16,7 @@ import { CommentsModule } from 'src/comments/comments.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const secret = configService.get('jwt.access.secret');
-        console.log('JWT Secret loaded:', secret ? 'Yes' : 'No');
+        // console.log('JWT Secret loaded:', secret ? 'Yes' : 'No');
         return {
           secret: secret,
           signOptions: { expiresIn: configService.get('jwt.access.expiresIn') || '15m' },
@@ -25,7 +26,8 @@ import { CommentsModule } from 'src/comments/comments.module';
     }),
     forwardRef(() => UsersModule), // 👈 КЛЮЧЕВОЙ МОМЕНТ: добавляем UsersModule в imports
     forwardRef(() => PostsModule),
-    forwardRef(() => CommentsModule)
+    forwardRef(() => CommentsModule),
+    forwardRef(() => ChatModule)
   ],
   providers: [
     AppGateway,
