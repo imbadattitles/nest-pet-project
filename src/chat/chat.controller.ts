@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, UploadedFile, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { Types } from 'mongoose';
 import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { createUploadConfig, editFileName } from 'src/common/imageHelper';
 
 @Controller('chat')
 @UseGuards(AccessTokenGuard)
@@ -50,15 +52,39 @@ export class ChatController {
   }
 
   @Post(':dialogId/messages')
-  @UseInterceptors(FileInterceptor('attachments'))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'images', maxCount: 10 },
+    { name: 'videos', maxCount: 3 },
+    { name: 'audios', maxCount: 5 },
+    { name: 'documents', maxCount: 10 },
+  ], createUploadConfig('messages')))
   async sendMessage(
-    @Req() req, 
+    @Req() req,
     @Param('dialogId') dialogId: string,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFiles() files: {
+      images?: Express.Multer.File[];
+      videos?: Express.Multer.File[];
+      audios?: Express.Multer.File[];
+      documents?: Express.Multer.File[];
+    },
     @Body() dto: CreateMessageDto
   ) {
-    // console.log(dto);
-    // console.log(file);
+      const attachments = [
+      ...(files.images || []).map(f => ({ ...f, type: 'image' })),
+      ...(files.videos || []).map(f => ({ ...f, type: 'video' })),
+      ...(files.audios || []).map(f => ({ ...f, type: 'audio' })),
+      ...(files.documents || []).map(f => ({ ...f, type: 'document' })),
+    ];
+
+    const attachmentsData = attachments.map(file => ({
+      filename: file.filename,
+      originalname: file.originalname,
+      url: file.path,
+      size: file.size,
+      mimetype: file.mimetype,
+      type: file.type, // 'image', 'video', 'audio', 'document'
+    }));
+    
     return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId)});
   }
 
