@@ -35,12 +35,6 @@ export class Dialog extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Message' })
   lastMessage?: Types.ObjectId;
 
-  @Prop({ default: '' })
-  lastMessageText?: string;
-
-  @Prop({ default: Date.now })
-  lastMessageTime?: Date;
-
   @Prop({ type: Types.ObjectId, ref: 'User' })
   lastMessageSender?: Types.ObjectId;
 

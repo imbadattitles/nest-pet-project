@@ -115,8 +115,6 @@ export class ChatService {
 
     // Обновляем диалог
     dialog.lastMessage = message._id;
-    dialog.lastMessageText = dto.text || '[Вложение]';
-    dialog.lastMessageTime = message.createdAt;
     dialog.lastMessageSender = senderId;
     
     for (const participant of dialog.participants) {
@@ -203,9 +201,9 @@ export class ChatService {
       isActive: true
     })
     .populate('participants', 'username avatar online lastSeen')
-    .populate('lastMessage')
+    .populate('lastMessage', 'text attachments')
     .sort({ lastMessageTime: -1 }).exec();
-    
+    console.log(dialogs)
     return dialogs.map(conv => {
       const otherUser = conv.type === 'private' 
         ? conv.participants.find(p => p._id.toString() !== userId.toString())
@@ -219,7 +217,6 @@ export class ChatService {
         withUser: otherUser,
         participants:  conv.participants ,
         lastMessage: conv.lastMessage,
-        lastMessageTime: conv.lastMessageTime,
         unreadCount: conv.unreadCount.get(userId.toString()) || 0,
         updatedAt: conv.updatedAt
       };
