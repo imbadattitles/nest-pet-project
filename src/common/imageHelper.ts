@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { diskStorage } from "multer";
-import { extname } from "path";
+import path, { extname, join } from "path";
 import * as fs from 'fs';
 // Функция для генерации имени файла
 export const editFileName = (req, file, callback) => {
@@ -47,7 +47,7 @@ export const defaultFileTypes: FileTypeConfig[] = [
     type: 'audio',
     allowedExtensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a'],
     maxSize: 20 * 1024 * 1024, // 20MB
-    folder: 'audio',
+    folder: 'audios',
   },
   {
     type: 'document',
@@ -60,7 +60,6 @@ export const defaultFileTypes: FileTypeConfig[] = [
 export const createUploadConfig = (moduleName: string, customTypes?: FileTypeConfig[]) => {
   const fileTypes = customTypes || defaultFileTypes;
   
-  // Создаём карту для быстрого доступа
   const typeMap = new Map<string, FileTypeConfig>();
   fileTypes.forEach(type => {
     type.allowedExtensions.forEach(ext => {
@@ -68,23 +67,26 @@ export const createUploadConfig = (moduleName: string, customTypes?: FileTypeCon
     });
   });
 
-  const getDestination = (req: any, file: Express.Multer.File, callback: any) => {
-    const ext = extname(file.originalname).toLowerCase().substring(1);
-    const fileType = typeMap.get(ext);
-    
-    if (!fileType) {
-      return callback(new BadRequestException(`File type .${ext} is not supported`), null);
-    }
-    
-    const destination = `./uploads/${moduleName}/${fileType.folder}`;
-    
-    // Создаём директорию если нужно
-    if (!fs.existsSync(destination)) {
-      fs.mkdirSync(destination, { recursive: true });
-    }
-    
-    callback(null, destination);
-  };
+const getDestination = (req: any, file: Express.Multer.File, callback: any) => {
+  const ext = extname(file.originalname).toLowerCase().substring(1);
+  const fileType = typeMap.get(ext);
+  
+  if (!fileType) {
+    return callback(new BadRequestException(`File type .${ext} is not supported`), null);
+  }
+  
+  // Просто возвращаем строку с прямыми слешами
+  const destination = `./uploads/${moduleName}/${fileType.folder}`;
+  
+  // Создаём директорию
+  const fullPath = destination.replace(/\//g, path.sep);
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
+  }
+  console.log(destination)
+  
+  callback(null, destination); // Возвращаем ./uploads/messages/images
+};
 
   const editFileName = (req: any, file: Express.Multer.File, callback: any) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -97,7 +99,6 @@ export const createUploadConfig = (moduleName: string, customTypes?: FileTypeCon
     const fileType = typeMap.get(ext);
     
     if (fileType) {
-      // Сохраняем тип файла в request для дальнейшего использования
       if (!req.fileTypes) req.fileTypes = [];
       req.fileTypes.push({
         fieldname: file.fieldname,
@@ -117,7 +118,7 @@ export const createUploadConfig = (moduleName: string, customTypes?: FileTypeCon
     }),
     fileFilter,
     limits: {
-      fileSize: Math.max(...fileTypes.map(t => t.maxSize)), // Самый большой лимит
+      fileSize: Math.max(...fileTypes.map(t => t.maxSize)),
     },
   };
 };

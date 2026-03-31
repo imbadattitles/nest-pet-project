@@ -6,7 +6,7 @@ import { Types } from 'mongoose';
 import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
 import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { createUploadConfig, editFileName } from 'src/common/imageHelper';
+import { createUploadConfig } from 'src/common/imageHelper';
 
 @Controller('chat')
 @UseGuards(AccessTokenGuard)
@@ -77,14 +77,14 @@ export class ChatController {
     ];
 
     const attachmentsData = attachments.map(file => ({
-      filename: file.filename,
+      name: file.filename,
       originalname: file.originalname,
-      url: file.path,
+      url:  `uploads/messages/${file.type}s/${file.filename}`,
       size: file.size,
-      mimetype: file.mimetype,
+      mimeType: file.mimetype,
       type: file.type, // 'image', 'video', 'audio', 'document'
     }));
-    
+    console.log(attachmentsData);
     return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId), attachments: attachmentsData});
   }
 
