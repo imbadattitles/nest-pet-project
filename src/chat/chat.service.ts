@@ -201,7 +201,7 @@ export class ChatService {
       isActive: true
     })
     .populate('participants', 'username avatar online lastSeen')
-    .populate('lastMessage', 'text attachments')
+    .populate('lastMessage')
     .sort({ lastMessageTime: -1 }).exec();
     console.log(dialogs)
     return dialogs.map(conv => {

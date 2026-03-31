@@ -85,7 +85,7 @@ export class ChatController {
       type: file.type, // 'image', 'video', 'audio', 'document'
     }));
     
-    return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId)});
+    return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId), attachments: attachmentsData});
   }
 
   @Patch(':dialogId/read')

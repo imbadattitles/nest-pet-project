@@ -21,6 +21,10 @@ export class UrlHelper {
     if (transformed.avatar && typeof transformed.avatar === 'string') {
       transformed.avatar = this.getFullUrl(transformed.avatar, configService);
     }
+
+    if (transformed.url && typeof transformed.url === 'string') {
+      transformed.url = this.getFullUrl(transformed.url, configService);
+    }
     
     return transformed;
   }
