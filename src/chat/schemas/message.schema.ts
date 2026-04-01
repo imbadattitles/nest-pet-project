@@ -66,8 +66,8 @@ export class Message {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   mentions: Types.ObjectId[];
 
-  @Prop({ default: false })
-  isDeleted: boolean;
+  @Prop({ type: Map, of: Boolean, select: false, default: {} })
+  isDeleted?: Map<string, boolean>;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   deletedBy: Types.ObjectId[];
@@ -94,3 +94,4 @@ MessageSchema.virtual('sender', {
 MessageSchema.index({ dialogId: 1, createdAt: -1 });
 MessageSchema.index({ senderId: 1 });
 MessageSchema.index({ mentions: 1 });
+MessageSchema.index({ dialogId: 1, "isDeleted.userId": 1, createdAt: -1 });

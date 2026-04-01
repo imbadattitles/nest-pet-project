@@ -17,6 +17,7 @@ import { UsersService } from 'src/users/users.service';
 import { CommentsService } from 'src/comments/comments.service';
 import { ChatService } from 'src/chat/chat.service';
 import { Dialog } from 'src/chat/schemas/dialog.schema';
+import { Types } from 'mongoose';
 
 @WebSocketGateway({
   cors: {
@@ -132,33 +133,59 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.disconnect();
     }
   }
-private async addUserToRoom(userId: string, roomName: string, forceJoin: boolean = true) {
-  const userSockets = this.userSockets.get(userId) || [];
-  let joinedCount = 0;
-  
-  for (const socketId of userSockets) {
-    // @ts-ignore
-    const socket = this.server.sockets.get(socketId);
-    if (socket && socket.connected) {
-      // Проверяем, состоит ли уже в комнате (опционально)
-      const isAlreadyInRoom = socket.rooms.has(roomName);
-      
-      if (!isAlreadyInRoom || forceJoin) {
-        socket.join(roomName);
-        joinedCount++;
-        this.logger.debug(`✅ Added socket ${socketId} to room ${roomName}`);
-      } else {
-        this.logger.debug(`ℹ️ Socket ${socketId} already in room ${roomName}`);
+  private async addUserToRoom(userId: string, roomName: string, forceJoin: boolean = true) {
+    const userSockets = this.userSockets.get(userId) || [];
+    let joinedCount = 0;
+    
+    for (const socketId of userSockets) {
+      // @ts-ignore
+      const socket = this.server.sockets.get(socketId);
+      if (socket && socket.connected) {
+        // Проверяем, состоит ли уже в комнате (опционально)
+        const isAlreadyInRoom = socket.rooms.has(roomName);
+        
+        if (!isAlreadyInRoom || forceJoin) {
+          socket.join(roomName);
+          joinedCount++;
+          this.logger.debug(`✅ Added socket ${socketId} to room ${roomName}`);
+        } else {
+          this.logger.debug(`ℹ️ Socket ${socketId} already in room ${roomName}`);
+        }
       }
     }
+    
+    if (joinedCount > 0) {
+      this.logger.log(`✅ Added ${joinedCount} sockets of user ${userId} to room ${roomName}`);
+    }
+    
+    return joinedCount;
   }
-  
-  if (joinedCount > 0) {
-    this.logger.log(`✅ Added ${joinedCount} sockets of user ${userId} to room ${roomName}`);
+  private async removeUserFromRoom(userId: string, roomName: string): Promise<number> {
+    const userSockets = this.userSockets.get(userId) || [];
+    let removedCount = 0;
+    
+    for (const socketId of userSockets) {
+      // @ts-ignore
+      const socket = this.server.sockets.get(socketId);
+      if (socket && socket.connected) {
+        const isInRoom = socket.rooms.has(roomName);
+        
+        if (isInRoom) {
+          socket.leave(roomName);
+          removedCount++;
+          this.logger.debug(`✅ Removed socket ${socketId} from room ${roomName}`);
+        } else {
+          this.logger.debug(`ℹ️ Socket ${socketId} not in room ${roomName}`);
+        }
+      }
+    }
+    
+    if (removedCount > 0) {
+      this.logger.log(`✅ Removed ${removedCount} sockets of user ${userId} from room ${roomName}`);
+    }
+    
+    return removedCount;
   }
-  
-  return joinedCount;
-}
 
   private extractTokenFromCookie(cookieString: string): string | null {
     const cookies = cookieString.split(';').reduce((acc, cookie) => {
@@ -255,6 +282,17 @@ private async addUserToRoom(userId: string, roomName: string, forceJoin: boolean
       timestamp: new Date().toISOString(),
     });
   }
+
+  async dialogDeleted(dialogId: string, partificants:Types.ObjectId[]) {
+    this.server.to(`dialog:${dialogId}`).emit('chat:dialogDeleted', {
+      dialogId
+    });
+    const promises = partificants.map(participant => 
+      this.removeUserFromRoom(participant.toString(), `dialog:${dialogId}`)
+    );
+    await Promise.all(promises);
+  }
+  
 
   @SubscribeMessage('chat:message')
   handleChatMessage(

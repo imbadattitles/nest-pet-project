@@ -53,7 +53,7 @@ export class Dialog extends Document {
   isActive: boolean;
 
   @Prop({ type: Map, of: Object, select: false, default: {} })
-  usersStatus?: Map<string, {
+  usersStatus: Map<string, {
     dialogDelete: boolean;
     notifications: boolean;
   }>;

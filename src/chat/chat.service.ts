@@ -77,9 +77,98 @@ export class ChatService {
     return dialog.populate('participants', 'username avatar');
   }
 
-  async deleteDialogAll(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
-    await this.dialogModel.findByIdAndDelete(dialogId);
-    await this.messageModel.deleteMany({ dialogId });
+private async updateMessagesDeletionStatus(
+  dialogId: Types.ObjectId, 
+  userIds: Types.ObjectId[], 
+  actingUserId: Types.ObjectId
+): Promise<void> {
+  const setDeleteObject: any = {};
+  userIds.forEach(userId => {
+    setDeleteObject[`isDeleted.${userId.toString()}`] = true;
+  });
+  
+  await this.messageModel.updateMany(
+    { dialogId },
+    {
+      $set: setDeleteObject,
+      $addToSet: {
+        deletedBy: actingUserId
+      }
+    }
+  );
+}
+
+async deleteDialogAll(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
+  const dialog = await this.dialogModel.findById(dialogId);
+  if (!dialog) return;
+  
+  dialog.participants.forEach(participant => {
+    const userStatus = dialog.usersStatus.get(participant.toString());
+    dialog.usersStatus.set(participant.toString(), {
+      notifications: userStatus?.notifications ?? false,
+      dialogDelete: true
+    });
+  });
+  await dialog.save();
+  
+  await this.updateMessagesDeletionStatus(
+    dialogId, 
+    dialog.participants, 
+    userId
+  );
+  
+  await this.appGateway.dialogDeleted(dialogId.toString(), dialog.participants);
+}
+
+
+async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
+  const message = await this.messageModel.findById(messageId);
+  if (!message) return;
+  
+  await this.messageModel.updateOne(
+    { _id: messageId },
+    {
+      $set: { [`isDeleted.${userId.toString()}`]: true },
+      $addToSet: { deletedBy: userId }
+    }
+  );
+}
+
+async deleteMessageForAll(messageId: Types.ObjectId, actingUserId: Types.ObjectId): Promise<void> {
+  const message = await this.messageModel.findById(messageId);
+  if (!message) return;
+  
+  const dialog = await this.dialogModel.findById(message.dialogId);
+  if (!dialog) return;
+  
+  await this.updateMessagesDeletionStatus(
+    message.dialogId,
+    dialog.participants,
+    actingUserId
+  );
+}
+
+
+  async deleteDialogOne(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
+    const dialog = await this.dialogModel.findById(dialogId);
+    if (dialog) {
+      const currentStatus = dialog.usersStatus.get(userId.toString());
+      dialog?.usersStatus.set(userId.toString(), {notifications: currentStatus?.notifications ?? false, dialogDelete: true });
+      await dialog.save();
+    }
+
+    await this.messageModel.updateMany(
+    { dialogId },
+    {
+      $set: {
+        [`isDeleted.${userId.toString()}`]: true
+      },
+      $addToSet: {
+        deletedBy: userId
+      }
+    }
+    );
+    await this.appGateway.dialogDeleted(dialogId.toString(), [userId]);
   }
 
   async sendMessage(senderId: Types.ObjectId, dto: CreateMessageDto): Promise<MessageDocument> {
@@ -94,22 +183,20 @@ export class ChatService {
       throw new ForbiddenException('Not a participant');
     }
     
-    // Определяем получателей
     let receiverId: Types.ObjectId | null = null;
     let pendingFor: Types.ObjectId[] = [];
     
     if (dialog.type === 'private') {
-  const otherParticipant = dialog.participants.find(
-    p => p._id.toString() !== senderId.toString()
-  );
-  
-  // Безопасная проверка
-  if (!otherParticipant) {
-    throw new Error('Participant not found in private dialog');
-  }
-  
-  receiverId = otherParticipant._id;
-  pendingFor = [receiverId];
+      const otherParticipant = dialog.participants.find(
+        p => p._id.toString() !== senderId.toString()
+    );
+    
+      if (!otherParticipant) {
+        throw new Error('Participant not found in private dialog');
+      }
+    
+      receiverId = otherParticipant._id;
+      pendingFor = [receiverId];
     }
     
     const message = new this.messageModel({
@@ -127,7 +214,6 @@ export class ChatService {
     await message.save();
     
 
-    // Обновляем диалог
     dialog.lastMessage = message._id;
     dialog.lastMessageSender = senderId;
     
@@ -147,6 +233,8 @@ export class ChatService {
     
     return mes
   }
+
+
 
   async markAsRead(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
     const dialog = await this.dialogModel.findById(dialogId);
@@ -239,7 +327,10 @@ export class ChatService {
 
   async getDialogById(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<DialogDocument> {
     // console.log('Getting dialog by ID:', dialogId, 'for user:', userId);
-    const dialog = await this.dialogModel.findById(dialogId)
+    const dialog = await this.dialogModel.findById({
+      _id: dialogId,
+      [`usersStatus.${userId}.dialogDelete`]: false
+    })
       .populate('participants', 'username avatar online lastSeen')
       .populate('lastMessage');
     // console.log('Found dialog:', dialog);
