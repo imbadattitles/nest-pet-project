@@ -30,7 +30,16 @@ export class ChatService {
         unreadCount: new Map([
           [userId1.toString(), 0],
           [userId2.toString(), 0]
-        ])
+        ]),
+        usersStatus: new Map([
+          [userId1.toString(), {
+            dialogDelete: false,
+            notifications: true
+          }],
+          [userId2.toString(), {
+            dialogDelete: false,
+            notifications: true
+          }]])
       });
       await dialog.save();
     }
@@ -66,6 +75,11 @@ export class ChatService {
     );
     
     return dialog.populate('participants', 'username avatar');
+  }
+
+  async deleteDialogAll(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
+    await this.dialogModel.findByIdAndDelete(dialogId);
+    await this.messageModel.deleteMany({ dialogId });
   }
 
   async sendMessage(senderId: Types.ObjectId, dto: CreateMessageDto): Promise<MessageDocument> {
@@ -198,12 +212,12 @@ export class ChatService {
   async getUserDialogs(userId: string): Promise<any[]> {
     const dialogs = await this.dialogModel.find({
       participants: userId,
-      isActive: true
+      isActive: true,
+      [`usersStatus.${userId}.dialogDelete`]: false
     })
     .populate('participants', 'username avatar online lastSeen')
     .populate('lastMessage')
     .sort({ lastMessageTime: -1 }).exec();
-    console.log(dialogs)
     return dialogs.map(conv => {
       const otherUser = conv.type === 'private' 
         ? conv.participants.find(p => p._id.toString() !== userId.toString())

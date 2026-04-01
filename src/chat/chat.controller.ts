@@ -36,6 +36,10 @@ export class ChatController {
     return this.chatService.getDialogById(new Types.ObjectId(dialogId), req.user.id);
   }
 
+  @Delete(':dialogId/deleteAll')
+  async deleteDialog(@Req() req, @Param('dialogId') dialogId: string) {
+    return this.chatService.deleteDialogAll(new Types.ObjectId(dialogId), req.user.id);
+  }
   @Get(':dialogId/messages')
   async getMessages(
     @Req() req,

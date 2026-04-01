@@ -51,6 +51,12 @@ export class Dialog extends Document {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop({ type: Map, of: Object, select: false, default: {} })
+  usersStatus?: Map<string, {
+    dialogDelete: boolean;
+    notifications: boolean;
+  }>;
 }
 
 export const DialogSchema = SchemaFactory.createForClass(Dialog);
@@ -58,5 +64,10 @@ export const DialogSchema = SchemaFactory.createForClass(Dialog);
 // Индексы
 DialogSchema.index({ participants: 1 });
 DialogSchema.index({ type: 1, participants: 1 });
+DialogSchema.index({ 
+  participants: 1, 
+  'usersStatus.dialogDelete': 1,
+  'usersStatus.notifications': 1 
+});
 DialogSchema.index({ lastMessageTime: -1 });
 
