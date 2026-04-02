@@ -77,7 +77,7 @@ export class ChatService {
     return dialog.populate('participants', 'username avatar');
   }
 
-private async updateMessagesDeletionStatus(
+private async updateMessagesDeletionStatusDialogId(
   dialogId: Types.ObjectId, 
   userIds: Types.ObjectId[], 
   actingUserId: Types.ObjectId
@@ -98,7 +98,7 @@ private async updateMessagesDeletionStatus(
   );
 }
 
-async deleteDialogAll(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
+async deleteDialogAll(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<any> {
   const dialog = await this.dialogModel.findById(dialogId);
   if (!dialog) return;
   
@@ -111,13 +111,16 @@ async deleteDialogAll(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise
   });
   await dialog.save();
   
-  await this.updateMessagesDeletionStatus(
+  await this.updateMessagesDeletionStatusDialogId(
     dialogId, 
     dialog.participants, 
     userId
   );
   
   await this.appGateway.dialogDeleted(dialogId.toString(), dialog.participants);
+  return {
+    success: true
+  }
 }
 
 
@@ -134,19 +137,46 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
   );
 }
 
-async deleteMessageForAll(messageId: Types.ObjectId, actingUserId: Types.ObjectId): Promise<void> {
-  const message = await this.messageModel.findById(messageId);
-  if (!message) return;
-  
-  const dialog = await this.dialogModel.findById(message.dialogId);
-  if (!dialog) return;
-  
-  await this.updateMessagesDeletionStatus(
-    message.dialogId,
-    dialog.participants,
-    actingUserId
-  );
-}
+  async deleteMessagesArrayForAll(dialogId: Types.ObjectId, messageIds: Types.ObjectId[], actingUserId: Types.ObjectId): Promise<any> {
+    const dialog = await this.dialogModel.findById(dialogId);
+    if (!dialog) return;
+    await this.markArrayMessageAsDeleted(messageIds, dialog.participants, actingUserId);
+    await this.appGateway.messagesDeleted(dialogId.toString(), messageIds);
+    return {
+      success: true
+    }
+  }
+
+  async deleteMessagesArrayForMe(dialogId: Types.ObjectId, messageIds: Types.ObjectId[], actingUserId: Types.ObjectId): Promise<any> {
+    const dialog = await this.dialogModel.findById(dialogId);
+    if (!dialog) return;
+    await this.markArrayMessageAsDeleted(messageIds, [actingUserId], actingUserId);
+    return {
+      success: true
+    }
+  }
+
+  private async markArrayMessageAsDeleted(
+    messageIds: Types.ObjectId[],
+    userIds: Types.ObjectId[],
+    actingUserId: Types.ObjectId,
+  ): Promise<void> {
+    const setDeleteObject: any = {};
+    const ids = Array.isArray(messageIds) ? messageIds : [messageIds];
+    userIds.forEach(userId => {
+      setDeleteObject[`isDeleted.${userId.toString()}`] = true;
+    });
+    
+    await this.messageModel.updateMany(
+      { _id: { $in: ids } },  // ← все сообщения из массива
+      {
+        $set: setDeleteObject,
+        $addToSet: { deletedBy: actingUserId }
+      }
+    );
+
+    
+  }
 
 
   async deleteDialogOne(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
@@ -278,9 +308,8 @@ async deleteMessageForAll(messageId: Types.ObjectId, actingUserId: Types.ObjectI
     }
     
     const query: any = { 
-      dialogId, 
-      isDeleted: false,
-      deletedBy: { $ne: userId }
+      dialogId,
+      [`isDeleted.${userId}`]: { $ne: true }
     };
     
     if (before) {

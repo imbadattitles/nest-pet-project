@@ -7,6 +7,7 @@ import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
 import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { createUploadConfig } from 'src/common/imageHelper';
+import { DeleteMessagesDto } from './dto/delete-messages.dto';
 
 @Controller('chat')
 @UseGuards(AccessTokenGuard)
@@ -90,6 +91,16 @@ export class ChatController {
     }));
     console.log(attachmentsData);
     return this.chatService.sendMessage(req.user.id, {...dto, dialogId: new Types.ObjectId(dialogId), attachments: attachmentsData});
+  }
+
+  @Delete(':dialogId/deleteMessagesForMe')
+    async deleteMessagesFormMe(@Req() req, @Param('dialogId') dialogId: string, @Body() dto: DeleteMessagesDto) {
+      return this.chatService.deleteMessagesArrayForMe(new Types.ObjectId(dialogId),  dto.messagesId, req.user.id);
+  }
+
+  @Delete(':dialogId/deleteMessagesForAll')
+    async deleteMessagesFormAll(@Req() req, @Param('dialogId') dialogId: string, @Body() dto: DeleteMessagesDto) {
+      return this.chatService.deleteMessagesArrayForAll(new Types.ObjectId(dialogId),  dto.messagesId, req.user.id);
   }
 
   @Patch(':dialogId/read')

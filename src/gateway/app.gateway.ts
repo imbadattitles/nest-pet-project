@@ -292,6 +292,13 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
     await Promise.all(promises);
   }
+
+  async messagesDeleted(dialogId: string, messagesId:Types.ObjectId[]) {
+    this.server.to(`dialog:${dialogId}`).emit('chat:messagesDeleted', {
+      dialogId,
+      messagesId
+    });
+  }
   
 
   @SubscribeMessage('chat:message')
