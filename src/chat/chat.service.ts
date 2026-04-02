@@ -266,33 +266,37 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
 
 
 
-  async markAsRead(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
-    const dialog = await this.dialogModel.findById(dialogId);
-    if (!dialog) {
-        throw new NotFoundException('Dialog not found');
-    }
-    const message = await this.messageModel.findOne({ dialogId })
-      .sort({ createdAt: -1 });
-    
-    if (message) {
-      const alreadyRead = message.readBy.some(r => r.userId.toString() === userId.toString());
-      if (!alreadyRead) {
-        message.readBy.push({ userId, readAt: new Date() });
-        await message.save();
-      }
+  async markSingleMessageAsRead(
+      messageId: Types.ObjectId,
+      dialogId: Types.ObjectId, 
+      userId: Types.ObjectId
+  ): Promise<void> {
+    const result = await this.messageModel.updateOne(
+          { 
+              _id: messageId,
+              'readBy.userId': { $ne: userId }  
+          },
+          {
+              $push: { readBy: { userId, readAt: new Date() } },
+              $pull: { pendingFor: userId }
+          }
+    );
       
-      if (message.pendingFor.includes(userId)) {
-        message.pendingFor = message.pendingFor.filter(
-          id => id.toString() !== userId.toString()
-        );
-        await message.save();
-      }
+    if (result.matchedCount === 0) {
+        throw new NotFoundException('Message not found or already read');
     }
-    
-    dialog.unreadCount.set(userId.toString(), 0);
-    await dialog.save();
-  }
+    const unreadCount = await this.messageModel.countDocuments({
+      dialogId: dialogId,
+      'readBy.userId': { $ne: userId },
+      pendingFor: userId
+    });
 
+    await this.dialogModel.updateOne(
+        { _id: dialogId },
+        { $set: { [`unreadCount.${userId}`]: unreadCount } }
+    );
+    await this.appGateway.messageAsRead(dialogId.toString(), messageId);
+  }
   async getMessages(
     dialogId: Types.ObjectId, 
     userId: Types.ObjectId, 

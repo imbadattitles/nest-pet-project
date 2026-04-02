@@ -299,7 +299,17 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       messagesId
     });
   }
-  
+  async messageAsRead(dialogId: string, messageId:Types.ObjectId) {
+    this.server.to(`dialog:${dialogId}`).emit('chat:messageAsRead', {
+      dialogId,
+      messageId,
+    });
+  }
+
+  @SubscribeMessage('chat:setAsRead') 
+  async setAsRead(@ConnectedSocket() client: Socket, @MessageBody() data: { messageId: Types.ObjectId, dialogId: Types.ObjectId }) {
+    await this.chatService.markSingleMessageAsRead(data.messageId, data.dialogId, client.data.user.id);
+  }
 
   @SubscribeMessage('chat:message')
   handleChatMessage(

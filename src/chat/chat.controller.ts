@@ -103,11 +103,11 @@ export class ChatController {
       return this.chatService.deleteMessagesArrayForAll(new Types.ObjectId(dialogId),  dto.messagesId, req.user.id);
   }
 
-  @Patch(':dialogId/read')
-  async markAsRead(@Req() req, @Param('dialogId') dialogId: string) {
-    return this.chatService.markAsRead(
-      new Types.ObjectId(dialogId),
-      req.user.id
-    );
-  }
+  // @Patch(':dialogId/read')
+  // async markAsRead(@Req() req, @Param('dialogId') dialogId: string) {
+  //   return this.chatService.markAsRead(
+  //     new Types.ObjectId(dialogId),
+  //     req.user.id
+  //   );
+  // }
 }
