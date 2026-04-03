@@ -281,10 +281,11 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
               $pull: { pendingFor: userId }
           }
     );
-      
+    await this.appGateway.messageAsRead(dialogId.toString(), messageId, userId);
     if (result.matchedCount === 0) {
         throw new NotFoundException('Message not found or already read');
     }
+    
     const unreadCount = await this.messageModel.countDocuments({
       dialogId: dialogId,
       'readBy.userId': { $ne: userId },
@@ -295,7 +296,7 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
         { _id: dialogId },
         { $set: { [`unreadCount.${userId}`]: unreadCount } }
     );
-    await this.appGateway.messageAsRead(dialogId.toString(), messageId);
+    
   }
   async getMessages(
     dialogId: Types.ObjectId, 

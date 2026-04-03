@@ -299,10 +299,11 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       messagesId
     });
   }
-  async messageAsRead(dialogId: string, messageId:Types.ObjectId) {
+  async messageAsRead(dialogId: string, messageId:Types.ObjectId, userId:Types.ObjectId) {
     this.server.to(`dialog:${dialogId}`).emit('chat:messageAsRead', {
       dialogId,
       messageId,
+      userId
     });
   }
 
