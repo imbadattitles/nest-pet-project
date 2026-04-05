@@ -89,8 +89,14 @@ export class UsersService {
     };
   }
 
-  async findByUsername(username: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ username }).exec();
+  async findByString(string: string): Promise<UserDocument[] | null> {
+    const regex = new RegExp(string, 'i'); // 'i' = case-insensitive
+    return this.userModel.find({
+      $or: [
+        { username: regex },
+        { email: regex }
+      ]
+    }).exec();
   }
 
   async findAll(): Promise<UserDocument[]> {

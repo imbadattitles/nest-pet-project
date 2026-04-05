@@ -48,7 +48,26 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
         message: 'Пользователи получены',
       };
     }
+
+    @Get('search')
+    @UseGuards(AccessTokenGuard)
+    async searchUsers(@Query('searchStr') searchStr: string) {
+      if (!searchStr) {
+        return {
+          success: true,
+          data: [],
+          message: 'Укажите строку для поиска',
+        };
+      }
   
+      const users = await this.usersService.findByString(searchStr);
+      
+      return {
+        success: true,
+        data: users?.length ? users : [],
+        message: users?.length ? 'Пользователи найдены' : 'Пользователи не найдены',
+      };
+    }
     /**
      * Получение пользователя по ID
      * GET /api/users/:id
@@ -177,27 +196,5 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
     }
 
   
-    /**
-     * Поиск пользователей по username
-     * GET /api/users/search?username=...
-     */
-    @Get('search')
-    @UseGuards(AccessTokenGuard)
-    async searchUsers(@Param('username') username: string) {
-      if (!username) {
-        return {
-          success: true,
-          data: [],
-          message: 'Укажите username для поиска',
-        };
-      }
-  
-      const user = await this.usersService.findByUsername(username);
-      
-      return {
-        success: true,
-        data: user ? [user] : [],
-        message: user ? 'Пользователь найден' : 'Пользователь не найден',
-      };
-    }
+
   }

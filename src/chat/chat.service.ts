@@ -271,32 +271,32 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
       dialogId: Types.ObjectId, 
       userId: Types.ObjectId
   ): Promise<void> {
-    const result = await this.messageModel.updateOne(
-          { 
-              _id: messageId,
-              'readBy.userId': { $ne: userId }  
-          },
-          {
-              $push: { readBy: { userId, readAt: new Date() } },
-              $pull: { pendingFor: userId }
-          }
-    );
-    await this.appGateway.messageAsRead(dialogId.toString(), messageId, userId);
-    if (result.matchedCount === 0) {
-        throw new NotFoundException('Message not found or already read');
-    }
-    
-    const unreadCount = await this.messageModel.countDocuments({
-      dialogId: dialogId,
-      'readBy.userId': { $ne: userId },
-      pendingFor: userId
-    });
+    try {
+      const result = await this.messageModel.updateOne(
+            { 
+                _id: messageId,
+                'readBy.userId': { $ne: userId }  
+            },
+            {
+                $push: { readBy: { userId, readAt: new Date() } },
+                $pull: { pendingFor: userId }
+            }
+      );
+      await this.appGateway.messageAsRead(dialogId.toString(), messageId, userId);
+      
+      const unreadCount = await this.messageModel.countDocuments({
+        dialogId: dialogId,
+        'readBy.userId': { $ne: userId },
+        pendingFor: userId
+      });
 
-    await this.dialogModel.updateOne(
-        { _id: dialogId },
-        { $set: { [`unreadCount.${userId}`]: unreadCount } }
-    );
-    
+      await this.dialogModel.updateOne(
+          { _id: dialogId },
+          { $set: { [`unreadCount.${userId}`]: unreadCount } }
+      );
+    } catch (error) {
+      console.log(error);
+    }
   }
   async getMessages(
     dialogId: Types.ObjectId, 
@@ -359,7 +359,7 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
     });
   }
 
-  async getDialogById(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<DialogDocument> {
+  async getDialogById(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<DialogDocument & {unreadCount: number}> {
     // console.log('Getting dialog by ID:', dialogId, 'for user:', userId);
     const dialog = await this.dialogModel.findById({
       _id: dialogId,
@@ -381,7 +381,7 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
       throw new ForbiddenException('Access denied');
     }
     
-    return dialog;
+    return {...dialog.toObject(), unreadCount: dialog.unreadCount.get(userId.toString()) || 0} as DialogDocument & {unreadCount: number};
   }
 
   private async sendSystemMessage(
