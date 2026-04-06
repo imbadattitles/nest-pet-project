@@ -21,13 +21,30 @@ import type { Request, Response } from 'express';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  // Регистрация (отправка кода)
   @Post('register')
-  async register(
-    @Body() registerDto: RegisterDto,
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
+  }
+
+  // Подтверждение регистрации (ввод кода)
+  @Post('verify-registration')
+  @HttpCode(HttpStatus.OK)
+  async verifyRegistration(
+    @Body('tempUserId') tempUserId: string,
+    @Body('code') code: string,
     @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
-    return this.authService.register(registerDto, req, res);
+    const result = await this.authService.verifyRegistration(tempUserId, code, req, res);
+    return res.json(result);
+  }
+
+  // Повторная отправка кода
+  @Post('resend-code')
+  @HttpCode(HttpStatus.OK)
+  async resendCode(@Body('tempUserId') tempUserId: string) {
+    return this.authService.resendVerificationCode(tempUserId);
   }
 
   @Post('login')

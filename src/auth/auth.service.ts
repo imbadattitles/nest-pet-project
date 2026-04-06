@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
@@ -8,7 +8,9 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcryptjs';
 import type { Response, Request } from 'express';
-
+import { TempRegistrationService } from './temp-registration.service';
+import { EmailService } from './email.service';
+import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class AuthService {
   constructor(
@@ -17,6 +19,8 @@ export class AuthService {
     private refreshTokenService: RefreshTokenService,
     private cookieService: CookieService,
     private configService: ConfigService,
+    private tempRegistrationService: TempRegistrationService,
+    private emailService: EmailService
   ) {}
 
   /**
@@ -34,40 +38,140 @@ export class AuthService {
   /**
    * Регистрация
    */
-  async register(registerDto: RegisterDto, req: Request, res: Response) {
-    try {
-      // Создаем пользователя
-      const user = await this.usersService.create(registerDto);
-
-      // Генерируем access token
-      const accessToken = await this.generateAccessToken(user);
-
-      // Создаем refresh token
-      const refreshToken = await this.refreshTokenService.createRefreshToken(
-        user._id.toString(),
-        req.headers['user-agent'],
-        req.ip,
-      );
-
-      // Устанавливаем куки
-      this.cookieService.setAccessTokenCookie(res, accessToken);
-      this.cookieService.setRefreshTokenCookie(res, refreshToken);
-
-      return {
-        success: true,
-        message: 'Регистрация успешна',
-        user: {
-          id: user._id,
-          email: user.email,
-          username: user.username,
-        },
-      };
-    } catch (error) {
-      if (error.code === 11000) {
-        throw new ConflictException('Email или username уже используются');
-      }
-      throw error;
+  async register(registerDto: RegisterDto) {
+    const { email, username, password } = registerDto;
+    
+    // Проверяем, не существует ли уже пользователь с таким email
+    const existingUser = await this.usersService.findByEmail( email );
+    if (existingUser) {
+      throw new ConflictException('Пользователь с таким email уже существует');
     }
+    
+    // Проверяем username
+    // const existingUsername = await this.usersService.findOne({ username });
+    // if (existingUsername) {
+    //   throw new ConflictException('Пользователь с таким username уже существует');
+    // }
+    
+    // Хешируем пароль
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Генерируем код и временный ID
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const tempUserId = uuidv4();
+    
+    // Сохраняем во временное хранилище (Redis)
+    await this.tempRegistrationService.save(tempUserId, {
+      email,
+      username,
+      password: hashedPassword,
+      code: verificationCode,
+      createdAt: Date.now(),
+    });
+    
+    // Отправляем код на почту
+    await this.emailService.sendVerificationEmail(email, verificationCode);
+    
+    return {
+      success: true,
+      message: 'Код подтверждения отправлен на почту. Действителен 15 минут.',
+      tempUserId, // Отдаем клиенту для последующих запросов
+    };
+  }
+
+  // 2. ПОДТВЕРЖДЕНИЕ РЕГИСТРАЦИИ (ввод кода)
+  async verifyRegistration(
+    tempUserId: string, 
+    code: string, 
+    req: Request, 
+    res: Response
+  ) {
+    // Получаем временные данные
+    const tempData = await this.tempRegistrationService.get(tempUserId);
+    
+    if (!tempData) {
+      throw new NotFoundException('Данные регистрации не найдены или истекли. Зарегистрируйтесь заново.');
+    }
+    
+    // Проверяем код
+    if (tempData.code !== code) {
+      throw new UnauthorizedException('Неверный код подтверждения');
+    }
+    
+    // Проверяем, не истек ли срок (хотя Redis сам удалит, но на всякий случай)
+    const isExpired = Date.now() - tempData.createdAt > 15 * 60 * 1000;
+    if (isExpired) {
+      await this.tempRegistrationService.delete(tempUserId);
+      throw new UnauthorizedException('Срок действия кода истек. Зарегистрируйтесь заново.');
+    }
+    
+    // Финальная проверка: не создал ли кто-то пользователя за это время
+    const existingUser = await this.usersService.findByEmail(tempData.email );
+    if (existingUser) {
+      await this.tempRegistrationService.delete(tempUserId);
+      throw new ConflictException('Пользователь с таким email уже существует');
+    }
+    
+    // Создаем пользователя в БД
+    const user = await this.usersService.create({
+      email: tempData.email,
+      username: tempData.username,
+      password: tempData.password, // уже хешированный
+      // isEmailVerified: true,
+    });
+    
+    // Удаляем временные данные
+    await this.tempRegistrationService.delete(tempUserId);
+    
+    // Генерируем токены (как в твоем изначальном коде)
+    const accessToken = await this.generateAccessToken(user);
+    const refreshToken = await this.refreshTokenService.createRefreshToken(
+      user._id.toString(),
+      req.headers['user-agent'],
+      req.ip,
+    );
+    
+    // Устанавливаем куки
+    this.cookieService.setAccessTokenCookie(res, accessToken);
+    this.cookieService.setRefreshTokenCookie(res, refreshToken);
+    
+    return {
+      success: true,
+      message: 'Регистрация успешно завершена',
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+      },
+    };
+  }
+
+  // 3. ПОВТОРНАЯ ОТПРАВКА КОДА
+  async resendVerificationCode(tempUserId: string) {
+    // Получаем временные данные
+    const tempData = await this.tempRegistrationService.get(tempUserId);
+    
+    if (!tempData) {
+      throw new NotFoundException('Данные регистрации не найдены. Зарегистрируйтесь заново.');
+    }
+    
+    // Генерируем новый код
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Обновляем данные в Redis
+    await this.tempRegistrationService.save(tempUserId, {
+      ...tempData,
+      code: newCode,
+      createdAt: Date.now(), // сбрасываем таймер
+    });
+    
+    // Отправляем новое письмо
+    await this.emailService.sendVerificationEmail(tempData.email, newCode);
+    
+    return {
+      success: true,
+      message: 'Новый код подтверждения отправлен на почту. Действителен 15 минут.',
+    };
   }
 
   /**

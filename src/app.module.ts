@@ -9,13 +9,25 @@ import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
 import { WebsocketModule } from './gateway/gateway.module';
 import { ChatModule } from './chat/chat.module';
-
+import { BullModule } from '@nestjs/bull'
 @Module({
   imports: [
     // Конфигурация
     ConfigModule.forRoot({
       load: [configuration],
       isGlobal: true,
+    }),
+
+    BullModule.forRoot({
+      redis: {
+        host: 'localhost',
+        port: 6379,
+        password: process.env.REDIS_PASSWORD,
+      },
+    }),
+    // Регистрируем очередь для email верификации
+    BullModule.registerQueue({
+      name: 'email-verification',
     }),
 
     // База данных
@@ -43,5 +55,6 @@ import { ChatModule } from './chat/chat.module';
     WebsocketModule,
     ChatModule
   ],
+  // exports: [BullModule]
 })
 export class AppModule {}

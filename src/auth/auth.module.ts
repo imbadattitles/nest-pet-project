@@ -11,6 +11,9 @@ import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { RefreshTokenService } from './refresh-token.service';
 import { CookieService } from './cookie.service';
 import { RefreshToken, RefreshTokenSchema } from './schemas/refresh-token.schema';
+import { TempRegistrationService } from './temp-registration.service';
+import { EmailService } from './email.service';
+import { RedisService } from 'src/globalServices/redis.service';
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { RefreshToken, RefreshTokenSchema } from './schemas/refresh-token.schema
     RefreshTokenStrategy,
     RefreshTokenService,
     CookieService,
+    TempRegistrationService,
+    EmailService,
+    RedisService
   ],
   exports: [AuthService],
 })
