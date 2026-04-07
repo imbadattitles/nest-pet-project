@@ -10,6 +10,7 @@ import { CommentsModule } from './comments/comments.module';
 import { WebsocketModule } from './gateway/gateway.module';
 import { ChatModule } from './chat/chat.module';
 import { BullModule } from '@nestjs/bull'
+import { RedisModule } from './globalServices/redis.module';
 @Module({
   imports: [
     // Конфигурация
@@ -46,7 +47,7 @@ import { BullModule } from '@nestjs/bull'
         limit: 100,
       },
     ]),
-
+    RedisModule,
     // Модули приложения
     UsersModule,
     AuthModule,

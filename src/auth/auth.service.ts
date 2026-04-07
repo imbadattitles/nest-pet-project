@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException, InternalServerErrorException, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
@@ -11,6 +11,8 @@ import type { Response, Request } from 'express';
 import { TempRegistrationService } from './temp-registration.service';
 import { EmailService } from './email.service';
 import { v4 as uuidv4 } from 'uuid';
+import { EmailException, RegistrationException } from 'src/common/expections/custom-exceptions';
+import { ErrorCode } from 'src/common/expections/error-codes';
 @Injectable()
 export class AuthService {
   constructor(
@@ -21,9 +23,9 @@ export class AuthService {
     private configService: ConfigService,
     private tempRegistrationService: TempRegistrationService,
     private emailService: EmailService,
-    private readonly logger = new Logger(AuthService.name)
+    
   ) {}
-
+  private readonly logger = new Logger(AuthService.name)
   /**
    * Валидация пользователя
    */
@@ -46,7 +48,11 @@ export class AuthService {
     // Проверяем, не существует ли уже пользователь с таким email
     const existingUser = await this.usersService.findByEmail( email );
     if (existingUser) {
-      throw new ConflictException('Пользователь с таким email уже существует');
+      throw new RegistrationException(
+        ErrorCode.REGISTRATION_EMAIL_EXISTS,
+        'Email already exists',
+        { email }
+      );
     }
     
     // Проверяем username
@@ -71,32 +77,26 @@ export class AuthService {
       createdAt: Date.now(),
     });
     
-      try {
-        await this.emailService.sendVerificationEmail(email, verificationCode);
-      } catch (emailError: any) {
-        // Если email не отправился - удаляем временные данные
-        await this.tempRegistrationService.delete(tempUserId);
-        this.logger.error(`Email sending failed for ${email}: ${emailError.message}`);
-        throw new BadRequestException(
-          `Не удалось отправить код подтверждения. ${emailError.message}`
-        );
-      }
+    try {
+      await this.emailService.sendVerificationEmail(email, verificationCode);
+    } catch (emailError) {
+      await this.tempRegistrationService.delete(tempUserId);
+      throw emailError; // Пробрасываем с уже правильным errorCode
+    }
     
     return {
       success: true,
-      message: 'Код подтверждения отправлен на почту. Действителен 15 минут.',
-      tempUserId, // Отдаем клиенту для последующих запросов
+      message: 'Код подтверждения отправлен',
+      tempUserId,
     };
 
-    } catch (error:any) {
-      this.logger.error(`Registration failed for ${registerDto.email}: ${error.message}`);
-      
-      if (error instanceof ConflictException || error instanceof BadRequestException) {
+    } catch (error) {
+      if (error instanceof RegistrationException || error instanceof EmailException) {
         throw error;
       }
-      
-      throw new InternalServerErrorException(
-        'Ошибка при регистрации. Пожалуйста, попробуйте позже.'
+      throw new HttpException(
+        { errorCode: ErrorCode.INTERNAL_SERVER_ERROR, message: 'Internal server error' },
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }

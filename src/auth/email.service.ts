@@ -1,6 +1,8 @@
-import * as nodemailer from 'nodemailer';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
+import { EmailException } from '../common/expections/custom-exceptions';
+import { ErrorCode } from '../common/expections/error-codes';
 
 @Injectable()
 export class EmailService {
@@ -8,15 +10,29 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   constructor(private configService: ConfigService) {
+    const emailUser = this.configService.get<string>('email.user');
+    const emailPassword = this.configService.get<string>('email.password');
+    const emailHost = this.configService.get<string>('email.host');
+    const emailPort = this.configService.get<number>('email.port');
+    const emailSecure = this.configService.get<boolean>('email.secure');
+    console.log(emailUser, emailPassword, emailHost, emailPort, emailSecure);
+    if (!emailUser || !emailPassword) {
+      this.logger.error('Email service not configured properly');
+      throw new EmailException(
+        ErrorCode.EMAIL_SERVICE_NOT_CONFIGURED,
+        'Email service not configured properly',
+        { missingFields: [!emailUser ? 'EMAIL_USER' : '', !emailPassword ? 'EMAIL_PASSWORD' : ''].filter(Boolean) }
+      );
+    }
+
     this.transporter = nodemailer.createTransport({
-      host: this.configService.get('EMAIL_HOST', 'smtp.yandex.ru'),
-      port: this.configService.get('EMAIL_PORT', 587),
-      secure: this.configService.get('EMAIL_SECURE', false),
+      host: emailHost,
+      port: emailPort,
+      secure: emailSecure,
       auth: {
-        user: this.configService.get('EMAIL_USER'),
-        pass: this.configService.get('EMAIL_PASSWORD'),
+        user: emailUser,
+        pass: emailPassword,
       },
-      // Таймауты для предотвращения зависаний
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 10000,
@@ -25,27 +41,24 @@ export class EmailService {
 
   async sendVerificationEmail(to: string, code: string): Promise<void> {
     try {
-      // 1. Валидация входных данных
+      // Валидация
       if (!to || !this.isValidEmail(to)) {
-        throw new Error('Invalid recipient email address');
+        throw new EmailException(
+          ErrorCode.EMAIL_INVALID_FORMAT,
+          'Invalid email format',
+          { email: to }
+        );
       }
       
       if (!code || !/^\d{6}$/.test(code)) {
-        throw new Error('Invalid verification code format');
+        throw new EmailException(
+          ErrorCode.EMAIL_SENDING_FAILED,
+          'Invalid verification code format',
+          { code }
+        );
       }
 
-      // 2. Проверяем конфигурацию
-      if (!this.configService.get('EMAIL_USER') || !this.configService.get('EMAIL_PASSWORD')) {
-        throw new Error('Email service not configured properly');
-      }
-
-      // 3. Проверяем соединение перед отправкой
-      const isVerified = await this.verifyConnection();
-      if (!isVerified) {
-        throw new Error('SMTP connection verification failed');
-      }
-
-      // 4. Отправляем письмо
+      // Отправка
       const info = await this.transporter.sendMail({
         from: `"Blog App" <${this.configService.get('EMAIL_USER')}>`,
         to: to,
@@ -54,21 +67,53 @@ export class EmailService {
         text: `Ваш код подтверждения: ${code}. Код действителен 15 минут.`,
       });
 
-      this.logger.log(`Email sent successfully to ${to}, messageId: ${info.messageId}`);
+      this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
       
     } catch (error) {
-      // 5. Детальная обработка ошибок
-      this.handleEmailError(error, to);
-    }
-  }
-
-  private async verifyConnection(): Promise<boolean> {
-    try {
-      await this.transporter.verify();
-      return true;
-    } catch (error: any) {
-      this.logger.error(`SMTP connection failed: ${error.message}`);
-      return false;
+      this.logger.error(`Email sending failed: ${error.message}`);
+      
+      // Классификация ошибок
+      if (error instanceof EmailException) {
+        throw error;
+      }
+      
+      if (error.code === 'EAUTH') {
+        throw new EmailException(
+          ErrorCode.EMAIL_AUTH_FAILED,
+          'Authentication failed',
+          { originalError: error.message }
+        );
+      }
+      
+      if (error.code === 'EENVELOPE') {
+        throw new EmailException(
+          ErrorCode.EMAIL_RECIPIENT_REJECTED,
+          'Recipient rejected',
+          { rejected: error.rejected, originalError: error.message }
+        );
+      }
+      
+      if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+        throw new EmailException(
+          ErrorCode.EMAIL_CONNECTION_FAILED,
+          'Connection failed',
+          { originalError: error.message }
+        );
+      }
+      
+      if (error.responseCode === 550) {
+        throw new EmailException(
+          ErrorCode.EMAIL_POLICY_REJECTION,
+          'Policy rejection',
+          { originalError: error.message }
+        );
+      }
+      
+      throw new EmailException(
+        ErrorCode.EMAIL_SENDING_FAILED,
+        error.message,
+        { originalError: error.message }
+      );
     }
   }
 
@@ -89,45 +134,5 @@ export class EmailService {
         <p style="color: #666; font-size: 14px;">Если вы не регистрировались, просто проигнорируйте это письмо.</p>
       </div>
     `;
-  }
-
-  private handleEmailError(error: any, recipient: string): never {
-    // Логируем полную информацию об ошибке
-    this.logger.error({
-      message: 'Failed to send verification email',
-      error: error.message,
-      stack: error.stack,
-      recipient,
-      code: error.code,
-      command: error.command,
-      responseCode: error.responseCode,
-    });
-
-    // Классификация ошибок
-    if (error.code === 'EAUTH') {
-      throw new Error('Ошибка аутентификации почтового сервера. Пожалуйста, проверьте настройки.');
-    }
-    
-    if (error.code === 'EENVELOPE') {
-      if (error.rejected && error.rejected.length > 0) {
-        throw new Error(`Не удалось отправить письмо на адрес ${error.rejected.join(', ')}. Проверьте правильность email.`);
-      }
-      throw new Error('Ошибка в адресе получателя или отправителя.');
-    }
-    
-    if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
-      throw new Error('Не удалось подключиться к почтовому серверу. Проверьте интернет-соединение.');
-    }
-    
-    if (error.responseCode === 550) {
-      throw new Error('Почтовый сервер отклонил отправку. Возможно, email адрес не существует или заблокирован.');
-    }
-    
-    if (error.responseCode === 535) {
-      throw new Error('Ошибка авторизации на почтовом сервере. Проверьте логин и пароль.');
-    }
-
-    // Общая ошибка
-    throw new Error(`Не удалось отправить письмо подтверждения: ${error.message}`);
   }
 }

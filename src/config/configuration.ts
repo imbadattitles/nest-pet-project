@@ -25,4 +25,11 @@ export default () => ({
     sameSite: 'lax' as const,
     domain: process.env.COOKIE_DOMAIN || undefined,
   },
+  email: {
+    user: process.env.EMAIL_USER || 'email-user-change-in-production',
+    password: process.env.EMAIL_PASSWORD || 'email-password-change-in-production',
+    host: process.env.EMAIL_HOST || 'smtp.yandex.ru',
+    port: process.env.EMAIL_PORT || 587,
+    secure: process.env.EMAIL_SECURE || false,
+  },
 });

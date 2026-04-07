@@ -34,7 +34,6 @@ import { RedisService } from 'src/globalServices/redis.service';
     CookieService,
     TempRegistrationService,
     EmailService,
-    RedisService
   ],
   exports: [AuthService],
 })

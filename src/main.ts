@@ -7,6 +7,7 @@ import { join } from 'path';
 import * as express from 'express';
 import { CleanMongooseInterceptor } from './common/interceptors/clean-mongoose.interceptor';
 import { UrlTransformerInterceptor } from './common/interceptors/url-transformer.interceptor';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -41,7 +42,7 @@ async function bootstrap() {
     
     next();
   }, express.static(join(__dirname, '..', 'uploads')));
-
+  app.useGlobalFilters(new HttpExceptionFilter());
   // Глобальные pipes
   app.useGlobalPipes(
     new ValidationPipe({
