@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, NotFoundException, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
@@ -20,7 +20,8 @@ export class AuthService {
     private cookieService: CookieService,
     private configService: ConfigService,
     private tempRegistrationService: TempRegistrationService,
-    private emailService: EmailService
+    private emailService: EmailService,
+    private readonly logger = new Logger(AuthService.name)
   ) {}
 
   /**
@@ -39,6 +40,7 @@ export class AuthService {
    * Регистрация
    */
   async register(registerDto: RegisterDto) {
+    try {
     const { email, username, password } = registerDto;
     
     // Проверяем, не существует ли уже пользователь с таким email
@@ -69,14 +71,34 @@ export class AuthService {
       createdAt: Date.now(),
     });
     
-    // Отправляем код на почту
-    await this.emailService.sendVerificationEmail(email, verificationCode);
+      try {
+        await this.emailService.sendVerificationEmail(email, verificationCode);
+      } catch (emailError: any) {
+        // Если email не отправился - удаляем временные данные
+        await this.tempRegistrationService.delete(tempUserId);
+        this.logger.error(`Email sending failed for ${email}: ${emailError.message}`);
+        throw new BadRequestException(
+          `Не удалось отправить код подтверждения. ${emailError.message}`
+        );
+      }
     
     return {
       success: true,
       message: 'Код подтверждения отправлен на почту. Действителен 15 минут.',
       tempUserId, // Отдаем клиенту для последующих запросов
     };
+
+    } catch (error:any) {
+      this.logger.error(`Registration failed for ${registerDto.email}: ${error.message}`);
+      
+      if (error instanceof ConflictException || error instanceof BadRequestException) {
+        throw error;
+      }
+      
+      throw new InternalServerErrorException(
+        'Ошибка при регистрации. Пожалуйста, попробуйте позже.'
+      );
+    }
   }
 
   // 2. ПОДТВЕРЖДЕНИЕ РЕГИСТРАЦИИ (ввод кода)
