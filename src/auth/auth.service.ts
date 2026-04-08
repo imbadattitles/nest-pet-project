@@ -207,7 +207,7 @@ export class AuthService {
       
       this.cookieService.setAccessTokenCookie(res, accessToken);
       this.cookieService.setRefreshTokenCookie(res, refreshToken);
-      
+      console.log('asdadad')
       return {
         success: true,
         message: 'Registration completed successfully',

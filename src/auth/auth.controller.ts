@@ -34,9 +34,9 @@ export class AuthController {
     @Body('tempUserId') tempUserId: string,
     @Body('code') code: string,
     @Req() req: Request,
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return await this.authService.verifyRegistration(tempUserId, code, req, res);
+    return this.authService.verifyRegistration(tempUserId, code, req, res);
   }
 
   // Повторная отправка кода
