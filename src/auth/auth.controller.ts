@@ -36,8 +36,7 @@ export class AuthController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const result = await this.authService.verifyRegistration(tempUserId, code, req, res);
-    return res.json(result);
+    return await this.authService.verifyRegistration(tempUserId, code, req, res);
   }
 
   // Повторная отправка кода

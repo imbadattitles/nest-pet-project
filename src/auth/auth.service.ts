@@ -11,7 +11,7 @@ import type { Response, Request } from 'express';
 import { TempRegistrationService } from './temp-registration.service';
 import { EmailService } from './email.service';
 import { v4 as uuidv4 } from 'uuid';
-import { EmailException, RegistrationException } from 'src/common/expections/custom-exceptions';
+import { AuthException, EmailException, RegistrationException, ValidationException } from 'src/common/expections/custom-exceptions';
 import { ErrorCode } from 'src/common/expections/error-codes';
 @Injectable()
 export class AuthService {
@@ -101,134 +101,289 @@ export class AuthService {
     }
   }
 
-  // 2. ПОДТВЕРЖДЕНИЕ РЕГИСТРАЦИИ (ввод кода)
   async verifyRegistration(
     tempUserId: string, 
     code: string, 
     req: Request, 
     res: Response
   ) {
-    // Получаем временные данные
-    const tempData = await this.tempRegistrationService.get(tempUserId);
-    
-    if (!tempData) {
-      throw new NotFoundException('Данные регистрации не найдены или истекли. Зарегистрируйтесь заново.');
-    }
-    
-    // Проверяем код
-    if (tempData.code !== code) {
-      throw new UnauthorizedException('Неверный код подтверждения');
-    }
-    
-    // Проверяем, не истек ли срок (хотя Redis сам удалит, но на всякий случай)
-    const isExpired = Date.now() - tempData.createdAt > 15 * 60 * 1000;
-    if (isExpired) {
+    try {
+      if (!tempUserId) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_TEMP_USER_ID_REQUIRED,
+          'Registration ID is required',
+          { tempUserId }
+        );
+      }
+      
+      if (!code) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_CODE_REQUIRED,
+          'Verification code is required',
+          { code }
+        );
+      }
+      
+      if (!/^\d{6}$/.test(code)) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_CODE_FORMAT,
+          'Code must be 6 digits',
+          { code }
+        );
+      }
+
+      const tempData = await this.tempRegistrationService.get(tempUserId);
+      
+      if (!tempData) {
+        this.logger.warn(`Verification failed: temp data not found for ${tempUserId}`);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_DATA_NOT_FOUND,
+          'Registration data not found or expired. Please register again.',
+          { tempUserId }
+        );
+      }
+      
+      const attempts = (tempData.attempts || 0) + 1;
+      await this.tempRegistrationService.updateAttempts(tempUserId, attempts);
+      
+      if (attempts > 5) {
+        this.logger.warn(`Max attempts exceeded for ${tempData.email}`);
+        await this.tempRegistrationService.delete(tempUserId);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_MAX_ATTEMPTS,
+          'Maximum verification attempts exceeded. Please register again.',
+          { maxAttempts: 5, attempts }
+        );
+      }
+      
+      if (tempData.code !== code) {
+        const remainingAttempts = 5 - attempts;
+        this.logger.warn(`Invalid code for ${tempData.email}, attempts: ${attempts}`);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_CODE_INVALID,
+          `Invalid verification code. ${remainingAttempts} attempts remaining.`,
+          { remainingAttempts, attempts }
+        );
+      }
+      
+      const isExpired = Date.now() - tempData.createdAt > 15 * 60 * 1000;
+      if (isExpired) {
+        this.logger.warn(`Code expired for ${tempData.email}`);
+        await this.tempRegistrationService.delete(tempUserId);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_CODE_EXPIRED,
+          'Verification code has expired. Please register again.',
+          { expiredAt: new Date(tempData.createdAt + 15 * 60 * 1000).toISOString() }
+        );
+      }
+      
+      const existingUser = await this.usersService.findByEmail(tempData.email);
+      if (existingUser) {
+        this.logger.warn(`User already exists: ${tempData.email}`);
+        await this.tempRegistrationService.delete(tempUserId);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_EMAIL_EXISTS,
+          'User with this email already exists',
+          { email: tempData.email }
+        );
+      }
+      
+      const user = await this.usersService.create({
+        email: tempData.email,
+        username: tempData.username,
+        password: tempData.password,
+      });
+      
+      this.logger.log(`User created successfully: ${user.email} (${user._id})`);
+      
       await this.tempRegistrationService.delete(tempUserId);
-      throw new UnauthorizedException('Срок действия кода истек. Зарегистрируйтесь заново.');
+      
+      const accessToken = await this.generateAccessToken(user);
+      const refreshToken = await this.refreshTokenService.createRefreshToken(
+        user._id.toString(),
+        req.headers['user-agent'],
+        req.ip,
+      );
+      
+      this.cookieService.setAccessTokenCookie(res, accessToken);
+      this.cookieService.setRefreshTokenCookie(res, refreshToken);
+      
+      return {
+        success: true,
+        message: 'Registration completed successfully',
+        user: {
+          id: user._id,
+          email: user.email,
+          username: user.username,
+        },
+      };
+      
+    } catch (error: any) {
+      this.logger.error(`Verification failed: ${error.message}`);
+      
+      if (error instanceof ValidationException || 
+          error instanceof RegistrationException) {
+        throw error;
+      }
+      
+      throw new RegistrationException(
+        ErrorCode.INTERNAL_SERVER_ERROR,
+        'Failed to verify registration. Please try again later.',
+        { originalError: error.message }
+      );
     }
-    
-    // Финальная проверка: не создал ли кто-то пользователя за это время
-    const existingUser = await this.usersService.findByEmail(tempData.email );
-    if (existingUser) {
-      await this.tempRegistrationService.delete(tempUserId);
-      throw new ConflictException('Пользователь с таким email уже существует');
-    }
-    
-    // Создаем пользователя в БД
-    const user = await this.usersService.create({
-      email: tempData.email,
-      username: tempData.username,
-      password: tempData.password, // уже хешированный
-      // isEmailVerified: true,
-    });
-    
-    // Удаляем временные данные
-    await this.tempRegistrationService.delete(tempUserId);
-    
-    // Генерируем токены (как в твоем изначальном коде)
-    const accessToken = await this.generateAccessToken(user);
-    const refreshToken = await this.refreshTokenService.createRefreshToken(
-      user._id.toString(),
-      req.headers['user-agent'],
-      req.ip,
-    );
-    
-    // Устанавливаем куки
-    this.cookieService.setAccessTokenCookie(res, accessToken);
-    this.cookieService.setRefreshTokenCookie(res, refreshToken);
-    
-    return {
-      success: true,
-      message: 'Регистрация успешно завершена',
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-      },
-    };
   }
 
-  // 3. ПОВТОРНАЯ ОТПРАВКА КОДА
   async resendVerificationCode(tempUserId: string) {
-    // Получаем временные данные
-    const tempData = await this.tempRegistrationService.get(tempUserId);
-    
-    if (!tempData) {
-      throw new NotFoundException('Данные регистрации не найдены. Зарегистрируйтесь заново.');
+    try {
+      if (!tempUserId) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_TEMP_USER_ID_REQUIRED,
+          'Registration ID is required',
+          { tempUserId }
+        );
+      }
+
+      const tempData = await this.tempRegistrationService.get(tempUserId);
+      
+      if (!tempData) {
+        this.logger.warn(`Resend failed: temp data not found for ${tempUserId}`);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_DATA_NOT_FOUND,
+          'Registration data not found. Please register again.',
+          { tempUserId }
+        );
+      }
+      
+      const existingUser = await this.usersService.findByEmail(tempData.email);
+      if (existingUser) {
+        this.logger.warn(`Resend failed: user already exists ${tempData.email}`);
+        await this.tempRegistrationService.delete(tempUserId);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_EMAIL_EXISTS,
+          'User with this email already exists',
+          { email: tempData.email }
+        );
+      }
+      
+      const isExpired = Date.now() - tempData.createdAt > 15 * 60 * 1000;
+      if (isExpired) {
+        this.logger.warn(`Resend failed: data expired for ${tempData.email}`);
+        await this.tempRegistrationService.delete(tempUserId);
+        throw new RegistrationException(
+          ErrorCode.REGISTRATION_CODE_EXPIRED,
+          'Registration has expired. Please register again.',
+          { email: tempData.email }
+        );
+      }
+      
+      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      await this.tempRegistrationService.save(tempUserId, {
+        ...tempData,
+        code: newCode,
+        createdAt: Date.now(),
+        attempts: 0,
+      });
+      
+      this.logger.log(`New code generated for ${tempData.email}`);
+      
+      try {
+        await this.emailService.sendVerificationEmail(tempData.email, newCode);
+        this.logger.log(`Resend email sent to ${tempData.email}`);
+      } catch (emailError: any) {
+        this.logger.error(`Failed to resend email: ${emailError.message}`);
+        
+        if (emailError instanceof EmailException) {
+          throw emailError;
+        }
+        
+        throw new EmailException(
+          ErrorCode.EMAIL_SENDING_FAILED,
+          'Failed to send verification code',
+          { originalError: emailError.message, email: tempData.email }
+        );
+      }
+      
+      return {
+        success: true,
+        message: 'New verification code has been sent to your email. Valid for 15 minutes.',
+      };
+      
+    } catch (error:any) {
+      this.logger.error(`Resend failed: ${error.message}`);
+      
+      if (error instanceof ValidationException || 
+          error instanceof RegistrationException || 
+          error instanceof EmailException) {
+        throw error;
+      }
+      
+      throw new RegistrationException(
+        ErrorCode.INTERNAL_SERVER_ERROR,
+        'Failed to resend verification code. Please try again later.',
+        { originalError: error.message }
+      );
     }
-    
-    // Генерируем новый код
-    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Обновляем данные в Redis
-    await this.tempRegistrationService.save(tempUserId, {
-      ...tempData,
-      code: newCode,
-      createdAt: Date.now(), // сбрасываем таймер
-    });
-    
-    // Отправляем новое письмо
-    await this.emailService.sendVerificationEmail(tempData.email, newCode);
-    
-    return {
-      success: true,
-      message: 'Новый код подтверждения отправлен на почту. Действителен 15 минут.',
-    };
   }
 
   /**
    * Вход
    */
   async login(loginDto: LoginDto, req: Request, res: Response) {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
-    
-    if (!user) {
-      throw new UnauthorizedException('Неверный email или пароль');
+    try {
+      const { email, password } = loginDto;
+      
+      // 🔥 Validate user
+      const user = await this.validateUser(email, password);
+      
+      if (!user) {
+        this.logger.warn(`Failed login attempt for email: ${email}`);
+        throw new AuthException(
+          ErrorCode.AUTH_INVALID_CREDENTIALS,
+          'Invalid email or password',
+          { email }
+        );
+      }
+      
+      
+      // 🔥 Generate tokens
+      const accessToken = await this.generateAccessToken(user);
+      const refreshToken = await this.refreshTokenService.createRefreshToken(
+        user._id.toString(),
+        req.headers['user-agent'],
+        req.ip,
+      );
+      
+      // 🔥 Set cookies
+      this.cookieService.setAccessTokenCookie(res, accessToken);
+      this.cookieService.setRefreshTokenCookie(res, refreshToken);
+      
+      this.logger.log(`User logged in successfully: ${user.email}`);
+      
+      return {
+        success: true,
+        message: 'Login successful',
+        user: {
+          id: user._id,
+          email: user.email,
+          username: user.username,
+        },
+      };
+      
+    } catch (error:any) {
+      this.logger.error(`Login failed: ${error.message}`);
+      
+      if (error instanceof AuthException) {
+        throw error;
+      }
+      
+      throw new AuthException(
+        ErrorCode.INTERNAL_SERVER_ERROR,
+        'Failed to login. Please try again later.',
+        { originalError: error.message }
+      );
     }
-
-    // Генерируем access token
-    const accessToken = await this.generateAccessToken(user);
-
-    // Создаем refresh token
-    const refreshToken = await this.refreshTokenService.createRefreshToken(
-      user._id.toString(),
-      req.headers['user-agent'],
-      req.ip,
-    );
-
-    // Устанавливаем куки
-    this.cookieService.setAccessTokenCookie(res, accessToken);
-    this.cookieService.setRefreshTokenCookie(res, refreshToken);
-
-    return {
-      success: true,
-      message: 'Вход выполнен успешно',
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-      },
-    };
   }
 
   /**

@@ -15,4 +15,18 @@ export class TempRegistrationService {
   async delete(userId: string) {
     await this.redisService.del(`temp_reg:${userId}`);
   }
+
+  async updateAttempts(userId: string, attempts: number) {
+    const data = await this.get(userId);
+    if (data) {
+      await this.save(userId, { ...data, attempts });
+    }
+  }
+
+  async update(userId: string, updates: any) {
+    const data = await this.get(userId);
+    if (data) {
+      await this.save(userId, { ...data, ...updates });
+    }
+  }
 }

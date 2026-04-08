@@ -18,3 +18,12 @@ export class RegistrationException extends HttpException {
     super({ errorCode, message, details }, HttpStatus.BAD_REQUEST);
   }
 }
+
+export class AuthException extends HttpException {
+  constructor(errorCode: ErrorCode, message: string, details?: any) {
+    super(
+      { errorCode, message, details, timestamp: new Date().toISOString() },
+      HttpStatus.UNAUTHORIZED
+    );
+  }
+}
