@@ -14,6 +14,7 @@ import { RefreshToken, RefreshTokenSchema } from './schemas/refresh-token.schema
 import { TempRegistrationService } from './temp-registration.service';
 import { EmailService } from './email.service';
 import { RedisService } from 'src/globalServices/redis.service';
+import { TempResetService } from './temp-reset.service';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { RedisService } from 'src/globalServices/redis.service';
     RefreshTokenService,
     CookieService,
     TempRegistrationService,
+    TempResetService,
     EmailService,
   ],
   exports: [AuthService],

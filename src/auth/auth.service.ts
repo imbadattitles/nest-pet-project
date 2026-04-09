@@ -11,8 +11,10 @@ import type { Response, Request } from 'express';
 import { TempRegistrationService } from './temp-registration.service';
 import { EmailService } from './email.service';
 import { v4 as uuidv4 } from 'uuid';
-import { AuthException, EmailException, RegistrationException, ValidationException } from 'src/common/expections/custom-exceptions';
+import { AuthException, EmailException, RecoveryException, RegistrationException, ValidationException } from 'src/common/expections/custom-exceptions';
 import { ErrorCode } from 'src/common/expections/error-codes';
+import { RecoveryDto } from './dto/recovery.dto';
+import { TempResetService } from './temp-reset.service';
 @Injectable()
 export class AuthService {
   constructor(
@@ -22,8 +24,8 @@ export class AuthService {
     private cookieService: CookieService,
     private configService: ConfigService,
     private tempRegistrationService: TempRegistrationService,
+    private tempResetService: TempResetService,
     private emailService: EmailService,
-    
   ) {}
   private readonly logger = new Logger(AuthService.name)
   /**
@@ -94,12 +96,176 @@ export class AuthService {
       if (error instanceof RegistrationException || error instanceof EmailException) {
         throw error;
       }
+      
+      
       throw new HttpException(
         { errorCode: ErrorCode.INTERNAL_SERVER_ERROR, message: 'Internal server error' },
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
+
+  async passwordRecovery(recoveryDto: RecoveryDto) {
+    try {
+    const { email } = recoveryDto;
+    
+    const existingUser = await this.usersService.findByEmail( email );
+    if (!existingUser) {
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_CREDENTIALS,
+          'Invalid email',
+          { email }
+        );
+    }
+    
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const tempUserId = uuidv4();
+    
+    await this.tempResetService.save(tempUserId, {
+      email,
+      userId: existingUser._id,
+      code: verificationCode,
+      createdAt: Date.now(),
+    });
+    
+    try {
+      await this.emailService.sendVerificationEmail(email, verificationCode);
+    } catch (emailError) {
+      await this.tempRegistrationService.delete(tempUserId);
+      throw emailError;
+    }
+    
+    return {
+      success: true,
+      message: 'Код подтверждения отправлен',
+      tempUserId,
+    };
+
+    } catch (error) {
+      if (error instanceof RecoveryException || error instanceof EmailException) {
+        throw error;
+      }
+      this.logger.error(`Registration failed: ${error}`);
+      throw new HttpException(
+        { errorCode: ErrorCode.INTERNAL_SERVER_ERROR, message: 'Internal server error' },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async verifyResetPassword(
+    tempUserId: string, 
+    code: string, 
+  ) {
+    try {
+      if (!tempUserId) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_TEMP_USER_ID_REQUIRED,
+          'Reset ID is required',
+          { tempUserId }
+        );
+      }
+      
+      if (!code) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_CODE_REQUIRED,
+          'Verification code is required',
+          { code }
+        );
+      }
+      
+      if (!/^\d{6}$/.test(code)) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_CODE_FORMAT,
+          'Code must be 6 digits',
+          { code }
+        );
+      }
+
+      const tempData = await this.tempResetService.get(tempUserId);
+      
+      if (!tempData) {
+        this.logger.warn(`Verification failed: temp data not found for ${tempUserId}`);
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_DATA_NOT_FOUND,
+          'Reset data not found or expired. Please register again.',
+          { tempUserId }
+        );
+      }
+      
+      const attempts = (tempData.attempts || 0) + 1;
+      await this.tempResetService.updateAttempts(tempUserId, attempts);
+      
+      if (attempts > 5) {
+        this.logger.warn(`Max attempts exceeded for ${tempData.email}`);
+        await this.tempResetService.delete(tempUserId);
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_MAX_ATTEMPTS,
+          'Maximum verification attempts exceeded. Please register again.',
+          { maxAttempts: 5, attempts }
+        );
+      }
+      
+      if (tempData.code !== code) {
+        const remainingAttempts = 5 - attempts;
+        this.logger.warn(`Invalid code for ${tempData.email}, attempts: ${attempts}`);
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_CODE_INVALID,
+          `Invalid verification code. ${remainingAttempts} attempts remaining.`,
+          { remainingAttempts, attempts }
+        );
+      }
+      
+      const isExpired = Date.now() - tempData.createdAt > 15 * 60 * 1000;
+      if (isExpired) {
+        this.logger.warn(`Code expired for ${tempData.email}`);
+        await this.tempResetService.delete(tempUserId);
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_CODE_EXPIRED,
+          'Verification code has expired. Please register again.',
+          { expiredAt: new Date(tempData.createdAt + 15 * 60 * 1000).toISOString() }
+        );
+      }
+      
+      const existingUser = await this.usersService.findByEmail(tempData.email);
+      if (!existingUser) {
+        this.logger.warn(`User not exists: ${tempData.email}`);
+        await this.tempResetService.delete(tempUserId);
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_CREDENTIALS,
+          'User with this email not exists',
+          { email: tempData.email }
+        );
+      }
+      
+      await this.tempResetService.save(tempUserId, {
+        email: tempData.email,
+        userId: existingUser._id,
+        code: 'verified',
+        createdAt: Date.now(),
+      });
+      
+      return {
+        success: true,
+        message: 'Verification successful',
+      };
+      
+    } catch (error: any) {
+      this.logger.error(`Verification failed: ${error.message}`);
+      
+      if (error instanceof ValidationException || 
+          error instanceof RecoveryException) {
+        throw error;
+      }
+      
+      throw new RecoveryException(
+        ErrorCode.INTERNAL_SERVER_ERROR,
+        'Failed to verify registration. Please try again later.',
+        { originalError: error.message }
+      );
+    }
+  }
+
 
   async verifyRegistration(
     tempUserId: string, 
@@ -207,7 +373,6 @@ export class AuthService {
       
       this.cookieService.setAccessTokenCookie(res, accessToken);
       this.cookieService.setRefreshTokenCookie(res, refreshToken);
-      console.log('asdadad')
       return {
         success: true,
         message: 'Registration completed successfully',

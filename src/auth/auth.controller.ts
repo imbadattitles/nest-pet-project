@@ -16,6 +16,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 // Используем type import для Express типов
 import type { Request, Response } from 'express';
+import { RecoveryDto } from './dto/recovery.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -44,6 +45,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async resendCode(@Body('tempUserId') tempUserId: string) {
     return this.authService.resendVerificationCode(tempUserId);
+  }
+
+  @Post('password-recovery')
+  @HttpCode(HttpStatus.OK)
+  async passwordRecovery(@Body() RecoveryDto: RecoveryDto) {
+    return this.authService.passwordRecovery(RecoveryDto);
+  }
+
+  @Post('verify-password-recovery')
+  @HttpCode(HttpStatus.OK)
+  async verifyPasswordRecovery(@Body('tempUserId') tempUserId: string, @Body('code') code: string) {
+    return this.authService.verifyResetPassword(tempUserId, code);
   }
 
   @Post('login')

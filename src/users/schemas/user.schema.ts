@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument } from 'mongoose';
+import { Document, HydratedDocument, Query } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 
 export type UserDocument = HydratedDocument<User>;
@@ -54,7 +54,7 @@ export class User extends Document {
 export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ username: 'text', email: 'text' });
 // Хеширование пароля перед сохранением
-UserSchema.pre<UserDocument>('save', async function (next) {
+UserSchema.pre<UserDocument>('save', async function () {
   if (!this.isModified('password')) {
   }
 
@@ -64,7 +64,17 @@ UserSchema.pre<UserDocument>('save', async function (next) {
   } catch (error) {
   }
 });
-
+UserSchema.pre<Query<any, UserDocument>>('findOneAndUpdate', async function() {
+  const update = this.getUpdate() as any;
+  if (update?.password) {
+    const salt = await bcrypt.genSalt(10);
+    update.password = await bcrypt.hash(update.password, salt);
+  }
+  if (update?.$set?.password) {
+    const salt = await bcrypt.genSalt(10);
+    update.$set.password = await bcrypt.hash(update.$set.password, salt);
+  }
+});
 // Метод для сравнения паролей
 UserSchema.methods.comparePassword = async function (
   candidatePassword: string,

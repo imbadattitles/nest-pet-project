@@ -6,6 +6,7 @@ import { User, UserSchema } from './schemas/user.schema';
 import { PostsModule } from 'src/posts/posts.module';
 import { WebsocketModule } from 'src/gateway/gateway.module';
 import { ChatModule } from 'src/chat/chat.module';
+import { TempResetService } from 'src/auth/temp-reset.service';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { ChatModule } from 'src/chat/chat.module';
     ChatModule
   ],
   controllers: [UsersController],
-  providers: [UsersService],
+  providers: [UsersService, TempResetService],
   exports: [UsersService],
 })
 export class UsersModule {}

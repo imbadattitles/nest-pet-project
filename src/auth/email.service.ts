@@ -41,26 +41,10 @@ export class EmailService {
 
   async sendVerificationEmail(to: string, code: string): Promise<void> {
     try {
-      // Валидация
-      if (!to || !this.isValidEmail(to)) {
-        throw new EmailException(
-          ErrorCode.EMAIL_INVALID_FORMAT,
-          'Invalid email format',
-          { email: to }
-        );
-      }
-      
-      if (!code || !/^\d{6}$/.test(code)) {
-        throw new EmailException(
-          ErrorCode.EMAIL_SENDING_FAILED,
-          'Invalid verification code format',
-          { code }
-        );
-      }
+      this.validationHandler(to, code);
 
-      // Отправка
       const info = await this.transporter.sendMail({
-        from: `"Blog App" <${this.configService.get('EMAIL_USER')}>`,
+        from: `"Another App" <${this.configService.get('EMAIL_USER')}>`,
         to: to,
         subject: 'Подтверждение регистрации',
         html: this.getEmailTemplate(code),
@@ -70,53 +54,89 @@ export class EmailService {
       this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
       
     } catch (error) {
-      this.logger.error(`Email sending failed: ${error.message}`);
+      this.errorHandler(error);
+    }
+  }
+  async sendResetPasswordEmail(to: string, code: string): Promise<void> {
+    try {
+      this.validationHandler(to, code);
+
+      const info = await this.transporter.sendMail({
+        from: `"Another App" <${this.configService.get('EMAIL_USER')}>`,
+        to: to,
+        subject: 'Восстановление пароля',
+        html: this.getEmailTemplatePassword(code),
+        text: `Ваш код подтверждения: ${code}. Код действителен 15 минут.`,
+      });
+
+      this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
       
-      // Классификация ошибок
-      if (error instanceof EmailException) {
-        throw error;
-      }
-      
-      if (error.code === 'EAUTH') {
-        throw new EmailException(
-          ErrorCode.EMAIL_AUTH_FAILED,
-          'Authentication failed',
-          { originalError: error.message }
-        );
-      }
-      
-      if (error.code === 'EENVELOPE') {
-        throw new EmailException(
-          ErrorCode.EMAIL_RECIPIENT_REJECTED,
-          'Recipient rejected',
-          { rejected: error.rejected, originalError: error.message }
-        );
-      }
-      
-      if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
-        throw new EmailException(
-          ErrorCode.EMAIL_CONNECTION_FAILED,
-          'Connection failed',
-          { originalError: error.message }
-        );
-      }
-      
-      if (error.responseCode === 550) {
-        throw new EmailException(
-          ErrorCode.EMAIL_POLICY_REJECTION,
-          'Policy rejection',
-          { originalError: error.message }
-        );
-      }
-      
+    } catch (error) {
+      this.errorHandler(error);
+    }
+  }
+  private validationHandler (to: string, code: string) {
+    if (!to || !this.isValidEmail(to)) {
+      throw new EmailException(
+        ErrorCode.EMAIL_INVALID_FORMAT,
+        'Invalid email format',
+        { email: to }
+      );
+    }
+    
+    if (!code || !/^\d{6}$/.test(code)) {
       throw new EmailException(
         ErrorCode.EMAIL_SENDING_FAILED,
-        error.message,
-        { originalError: error.message }
+        'Invalid verification code format',
+        { code }
       );
     }
   }
 
+  private errorHandler(error: any) {
+    this.logger.error(`Email sending failed: ${error.message}`);
+    if (error instanceof EmailException) {
+      throw error;
+    }
+    
+    if (error.code === 'EAUTH') {
+      throw new EmailException(
+        ErrorCode.EMAIL_AUTH_FAILED,
+        'Authentication failed',
+        { originalError: error.message }
+      );
+    }
+    
+    if (error.code === 'EENVELOPE') {
+      throw new EmailException(
+        ErrorCode.EMAIL_RECIPIENT_REJECTED,
+        'Recipient rejected',
+        { rejected: error.rejected, originalError: error.message }
+      );
+    }
+    
+    if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+      throw new EmailException(
+        ErrorCode.EMAIL_CONNECTION_FAILED,
+        'Connection failed',
+        { originalError: error.message }
+      );
+    }
+    
+    if (error.responseCode === 550) {
+      throw new EmailException(
+        ErrorCode.EMAIL_POLICY_REJECTION,
+        'Policy rejection',
+        { originalError: error.message }
+      );
+    }
+    
+    throw new EmailException(
+      ErrorCode.EMAIL_SENDING_FAILED,
+      error.message,
+      { originalError: error.message }
+    );
+  }
   private isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/;
     return emailRegex.test(email);
@@ -132,6 +152,20 @@ export class EmailService {
         </div>
         <p style="color: #666; font-size: 14px; margin-top: 20px;">Код действителен в течение 15 минут.</p>
         <p style="color: #666; font-size: 14px;">Если вы не регистрировались, просто проигнорируйте это письмо.</p>
+      </div>
+    `;
+  }
+
+  private getEmailTemplatePassword(code: string): string {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #333;">Восстановление пароля</h2>
+        <p>Ваш код подтверждения:</p>
+        <div style="font-size: 32px; font-weight: bold; color: #4F46E5; padding: 20px; background: #F3F4F6; text-align: center; border-radius: 8px;">
+          ${code}
+        </div>
+        <p style="color: #666; font-size: 14px; margin-top: 20px;">Код действителен в течение 15 минут.</p>
+        <p style="color: #666; font-size: 14px;">Если вы не пытались восстановить пароль, просто проигнорируйте это письмо.</p>
       </div>
     `;
   }

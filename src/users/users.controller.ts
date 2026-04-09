@@ -25,6 +25,7 @@ import {
   import { extname } from 'path';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { editFileName, imageFileFilter } from 'src/common/imageHelper';
+import { ChangePasswordDto } from './dto/change-password.dto';
   @Controller('users')
   export class UsersController {
     constructor(
@@ -136,6 +137,15 @@ import { editFileName, imageFileFilter } from 'src/common/imageHelper';
         success: true,
         data: user,
         message: 'Профиль изменён',
+      };
+    }
+
+    @Put('me/profile/reset-password')
+    async resetPassword(@Body() changePasswordDto: ChangePasswordDto) {
+      await this.usersService.changePassword({...changePasswordDto, from: 'reset'});
+      return {
+        success: true,
+        message: 'Пароль изменён',
       };
     }
 

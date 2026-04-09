@@ -1,17 +1,22 @@
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { AppGateway } from './../gateway/app.gateway';
 import { CurrentUser } from './../common/decorators/current-user.decorator';
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
+import { RecoveryException, ValidationException } from 'src/common/expections/custom-exceptions';
+import { ErrorCode } from 'src/common/expections/error-codes';
+import { TempResetService } from 'src/auth/temp-reset.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private AppGateway: AppGateway
+    private AppGateway: AppGateway,
+    private tempResetService: TempResetService,
   ) {}
-
+  private readonly logger = new Logger(UsersService.name)
   async create(createUserDto: { email: string; username: string; password: string }): Promise<UserDocument> {
     // Проверяем, не существует ли пользователь
     const existingUser = await this.userModel.findOne({
@@ -104,8 +109,15 @@ export class UsersService {
   }
 
   async update(id: string, updateData: Partial<User>): Promise<UserDocument | null> {
+    if (updateData.password) {
+      throw new ValidationException(
+        ErrorCode.GO_FUCK_YOURSELF,
+        'GO_FUCK_YOURSELF'
+      );
+    }
+    
     return this.userModel
-      .findByIdAndUpdate(id, updateData, { new: true })
+      .findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
       .select('-password')
       .exec();
   }
@@ -121,5 +133,28 @@ export class UsersService {
       return user;
     }
     return null;
+  }
+
+  async changePassword(ChangePasswordDto: ChangePasswordDto): Promise<void> {
+    if (ChangePasswordDto.from === 'reset') {
+      if (!ChangePasswordDto.tempUserId) {
+        throw new ValidationException(
+          ErrorCode.VALIDATION_TEMP_USER_ID_REQUIRED,
+          'Reset ID is required',
+        );
+      }
+      const tempData = await this.tempResetService.get(ChangePasswordDto.tempUserId);
+      
+      if (!tempData) {
+        this.logger.warn(`Verification failed: temp data not found for ${ChangePasswordDto.tempUserId}`);
+        throw new RecoveryException(
+          ErrorCode.PASSWORD_RESET_DATA_NOT_FOUND,
+          'Reset data not found or expired. ',
+        );
+      }
+      const userId = tempData.userId;
+      await this.userModel.findByIdAndUpdate(userId, { password: ChangePasswordDto.password });
+      await this.tempResetService.delete(ChangePasswordDto.tempUserId);
+    }
   }
 }
