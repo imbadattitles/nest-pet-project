@@ -129,7 +129,7 @@ export class AuthService {
     });
     
     try {
-      await this.emailService.sendVerificationEmail(email, verificationCode);
+      await this.emailService.sendResetPasswordEmail(email, verificationCode);
     } catch (emailError) {
       await this.tempRegistrationService.delete(tempUserId);
       throw emailError;
