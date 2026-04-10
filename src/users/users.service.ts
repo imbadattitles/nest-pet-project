@@ -41,7 +41,7 @@ export class UsersService {
   }
 
   async findMyProfile(id: string): Promise<UserDocument | null> {
-    return this.userModel.findById(id).select('+contacts').populate('contacts').exec();
+    return this.userModel.findById(id).select('+contacts').populate('contacts').lean().exec();
   }
 
   async getMyContacts(currentUser: any): Promise<{ success: boolean; data: string[]; message: string }> {

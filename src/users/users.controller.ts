@@ -121,7 +121,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
       const dialogs = await this.ChatService.getUserDialogs(currentUser.id);
       return {
         success: true,
-        data: { ...user?.toObject(), dialogs },
+        data: { user, dialogs },
         message: 'Профиль получен',
       };
     }

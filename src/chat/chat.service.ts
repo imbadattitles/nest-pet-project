@@ -174,8 +174,6 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
         $addToSet: { deletedBy: actingUserId }
       }
     );
-
-    
   }
 
 
@@ -243,9 +241,6 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
     
     await message.save();
     
-
-    dialog.lastMessage = message._id;
-    dialog.lastMessageSender = senderId;
     
     for (const participant of dialog.participants) {
       const userId = participant._id.toString();
@@ -258,8 +253,7 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
     await dialog.save();
 
     const mes = await message.populate('sender', 'username avatar')
-    const dial = await dialog.populate('lastMessage')
-    await this.appGateway.sendMessageToDialog(dialog._id.toString(), mes, dial);
+    await this.appGateway.sendMessageToDialog(dialog._id.toString(), mes, dialog);
     
     return mes
   }
@@ -338,12 +332,23 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
       [`usersStatus.${userId}.dialogDelete`]: false
     })
     .populate('participants', 'username avatar online lastSeen')
-    .populate('lastMessage')
-    .sort({ lastMessageTime: -1 }).exec();
-    return dialogs.map(conv => {
+    .exec();
+  
+    // Ждём выполнения всех промисов
+    const result = await Promise.all(dialogs.map(async conv => {
       const otherUser = conv.type === 'private' 
         ? conv.participants.find(p => p._id.toString() !== userId.toString())
         : null;
+      
+      const lastMessage = await this.messageModel.findOne({
+        dialogId: conv._id,
+        [`isDeleted.${userId}`]: { $ne: true }
+      })
+      .populate('sender', 'username avatar')
+      .populate('replyTo')
+      .populate('mentions', 'username')
+      .exec();
+      console.log(lastMessage);
       
       return {
         _id: conv._id,
@@ -351,12 +356,14 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
         groupName: conv.groupName,
         groupAvatar: conv.groupAvatar,
         withUser: otherUser,
-        participants:  conv.participants ,
-        lastMessage: conv.lastMessage,
+        participants: conv.participants,
         unreadCount: conv.unreadCount.get(userId.toString()) || 0,
-        updatedAt: conv.updatedAt
+        updatedAt: conv.updatedAt,
+        lastMessage
       };
-    });
+    }));
+  
+    return result;
   }
 
   async getDialogById(dialogId: Types.ObjectId, userId: Types.ObjectId): Promise<DialogDocument & {unreadCount: number}> {
@@ -366,8 +373,6 @@ async deleteMessage(messageId: Types.ObjectId, userId: Types.ObjectId): Promise<
       [`usersStatus.${userId}.dialogDelete`]: false
     })
       .populate('participants', 'username avatar online lastSeen')
-      .populate('lastMessage');
-    // console.log('Found dialog:', dialog);
     if (!dialog) {
       throw new NotFoundException('Dialog not found');
     }

@@ -9,7 +9,10 @@ export type DialogDocument = HydratedDocument<Dialog & {
   updatedAt: Date;
 }>;
 
-@Schema({ timestamps: true })
+@Schema({
+  timestamps: true,
+  versionKey: false,
+})
 export class Dialog extends Document {
   @Prop({ required: true, enum: ['private', 'group'] })
   type: string;
@@ -31,12 +34,6 @@ export class Dialog extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;
-
-  @Prop({ type: Types.ObjectId, ref: 'Message' })
-  lastMessage?: Types.ObjectId;
-
-  @Prop({ type: Types.ObjectId, ref: 'User' })
-  lastMessageSender?: Types.ObjectId;
 
   @Prop({ type: Map, of: Number, default: {} })
   unreadCount: Map<string, number>;
@@ -69,5 +66,4 @@ DialogSchema.index({
   'usersStatus.dialogDelete': 1,
   'usersStatus.notifications': 1 
 });
-DialogSchema.index({ lastMessageTime: -1 });
 

@@ -37,7 +37,10 @@ class Attachment {
   duration?: number;
 }
 
-@Schema({ timestamps: true })
+@Schema({
+  timestamps: true,
+  versionKey: false,
+})
 export class Message {
   @Prop({ type: Types.ObjectId, ref: 'Dialog', required: true, index: true })
   dialogId: Types.ObjectId;

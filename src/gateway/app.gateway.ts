@@ -18,6 +18,7 @@ import { CommentsService } from 'src/comments/comments.service';
 import { ChatService } from 'src/chat/chat.service';
 import { Dialog } from 'src/chat/schemas/dialog.schema';
 import { Types } from 'mongoose';
+import { Message } from 'src/chat/schemas/message.schema';
 
 @WebSocketGateway({
   cors: {
@@ -269,7 +270,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
 
   // ========== ЧАТ ==========
-  async sendMessageToDialog(dialogId: string, message: any, dialog:Dialog) {
+  async sendMessageToDialog(dialogId: string, message: Message, dialog: Dialog) {
     const promises = dialog.participants.map(participant => 
       this.addUserToRoom(participant._id.toString(), `dialog:${dialogId}`)
     );
@@ -278,7 +279,6 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`dialog:${dialogId}`).emit('chat:newMessage', {
       dialogId,
       message,
-      dialog,
       timestamp: new Date().toISOString(),
     });
   }
