@@ -42,8 +42,6 @@ GET {{baseUrl}}/posts?page=1&limit=10
 GET {{baseUrl}}/posts/ID_ПОСТА
 
 
-
-
 ### ========== USERS CONTROLLER ==========
 
 ### Получить всех пользователей (требуется токен)

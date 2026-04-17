@@ -40,8 +40,12 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
-  async findMyProfile(id: string): Promise<UserDocument | null> {
-    return this.userModel.findById(id).select('+contacts').populate('contacts').lean().exec();
+  async findMyProfile(id: string, withLean: boolean = true): Promise<UserDocument | null> {
+    if (withLean) {
+      return this.userModel.findById(id).select('+contacts').populate('contacts').lean().exec();
+    } else {
+      return this.userModel.findById(id).select('+contacts').populate('contacts').exec();
+    }
   }
 
   async getMyContacts(currentUser: any): Promise<{ success: boolean; data: string[]; message: string }> {
@@ -58,11 +62,11 @@ export class UsersService {
   }
 
   async addContact(currentUser:{ id: string }, data: { userId: string }): Promise<{ success: boolean; data: string[]; message: string }> {
-    const user = await this.findMyProfile(currentUser.id);
+    const user = await this.findMyProfile(currentUser.id, false);
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
-    // console.log(user)
+    console.log(user)
     if (!user.contacts.includes(data.userId)) {
       user.contacts.push(data.userId);
       this.AppGateway.sendNotification(data.userId, `У вас новый подписчик: ${currentUser.id}`);

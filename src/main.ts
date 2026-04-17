@@ -39,7 +39,6 @@ async function bootstrap() {
       res.sendStatus(200);
       return;
     }
-    
     next();
   }, express.static(join(__dirname, '..', 'uploads')));
   app.useGlobalFilters(new HttpExceptionFilter());
@@ -57,7 +56,7 @@ async function bootstrap() {
   
   app.useGlobalInterceptors(
     // new CleanMongooseInterceptor(),
-    new UrlTransformerInterceptor(configService)
+    // new UrlTransformerInterceptor(configService)
   );
   
   await app.listen(port);
