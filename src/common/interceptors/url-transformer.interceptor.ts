@@ -27,10 +27,10 @@ intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
 
 private transformData(data: any, baseUrl: string): any {
   if (data?.imageUrl) {
-    data.imageUrl = `${baseUrl}${data.imageUrl}`;
+    data.imageUrl = `${data.imageUrl}`;
   }
     if (data?.avatar) {
-    data.avatar = `${baseUrl}${data.avatar}`;
+    data.avatar = `${data.avatar}`;
   }
   return data;
 }}

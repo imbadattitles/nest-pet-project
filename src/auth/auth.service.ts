@@ -530,7 +530,7 @@ export class AuthService {
         success: true,
         message: 'Login successful',
         user: {
-          id: user._id,
+          _id: user._id,
           email: user.email,
           username: user.username,
         },
