@@ -13,6 +13,7 @@ import {
   DefaultValuePipe,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -44,6 +45,22 @@ export class PostsController {
       createPostDto.imageUrl = `/uploads/posts/${file.filename}`
     }
     return this.postsService.create(createPostDto, req.user.id);
+  }
+
+  @Post('upload-content-image')
+  @UseGuards(AccessTokenGuard)
+  @UseInterceptors(FileInterceptor('image', {
+    storage: diskStorage({
+      destination: './uploads/content',
+      filename: editFileName,
+    }),
+    fileFilter: imageFileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 }
+  }))
+  uploadContentImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Файл не загружен');
+    // Можно сразу создать миниатюры при необходимости
+    return { url: `/uploads/content/${file.filename}` };
   }
 
   @Get()

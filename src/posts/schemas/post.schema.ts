@@ -38,6 +38,12 @@ export class Post extends Document {
     default: 0,
   })
   commentsCount: number; // Денормализованное поле для быстрого подсчета
+
+  @Prop({
+    default: [],
+    type: [String]
+  })
+  contentImages: string[];
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);

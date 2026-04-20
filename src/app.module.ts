@@ -11,6 +11,8 @@ import { WebsocketModule } from './gateway/gateway.module';
 import { ChatModule } from './chat/chat.module';
 import { BullModule } from '@nestjs/bull'
 import { RedisModule } from './globalServices/redis.module';
+import { CommandsModule } from './commands/commands.module';
+import { ScheduleModule } from '@nestjs/schedule';
 @Module({
   imports: [
     // Конфигурация
@@ -47,6 +49,7 @@ import { RedisModule } from './globalServices/redis.module';
         limit: 100,
       },
     ]),
+    ScheduleModule.forRoot(),
     RedisModule,
     // Модули приложения
     UsersModule,
@@ -54,7 +57,8 @@ import { RedisModule } from './globalServices/redis.module';
     PostsModule,
     CommentsModule,
     WebsocketModule,
-    ChatModule
+    ChatModule,
+    CommandsModule
   ],
   // exports: [BullModule]
 })

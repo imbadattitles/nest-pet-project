@@ -1,3 +1,4 @@
+// import { sanitizeHtml } from 'sanitize-html';
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, HydratedDocument } from 'mongoose';
@@ -11,6 +12,7 @@ import {
   ICommentWithAuthor,
   IApiResponse 
 } from './interfaces/post-with-comments.interface';
+import { deleteFileByUrl, extractContentImageUrls } from './utils/image.utils';
 
 @Injectable()
 export class PostsService {
@@ -22,14 +24,39 @@ export class PostsService {
   /**
    * Создание поста
    */
-  async create(createPostDto: CreatePostDto, authorId: string) {
-    const post = new this.postModel({
-      ...createPostDto,
-      author: new Types.ObjectId(authorId),
-    });
+
+  sanitizeHtml = require('sanitize-html');
+  private normalizeContentImageUrls(html: string): string {
+  // Заменяем http(s)://домен/ на / во всех src изображений
+  return html.replace(/(<img[^>]+src=")([^"]+)("[^>]*>)/gi, (match, p1, src, p3) => {
+    // Удаляем протокол и домен
+    const cleanSrc = src.replace(/^https?:\/\/[^\/]+/i, '');
+    return p1 + cleanSrc + p3;
+  });
+}
+async create(createPostDto: CreatePostDto, authorId: string) {
+  const nonDomenContent = this.normalizeContentImageUrls(createPostDto.content);
+  const cleanContent = this.sanitizeHtml(nonDomenContent, {
+    allowedTags: this.sanitizeHtml.defaults.allowedTags.concat(['img']),
+    allowedAttributes: {
+      ...this.sanitizeHtml.defaults.allowedAttributes,
+      img: ['src', 'alt', 'width', 'height']
+    },
+    allowedSchemes: ['http', 'https', 'data'] // data для base64, но лучше только http/https
+  });
+
+    const contentImages = extractContentImageUrls(cleanContent);
+    console.log(contentImages)
+  const post = new this.postModel({
+    ...createPostDto,
+    content: cleanContent,
+    contentImages,          // <-- сохраняем массив
+    author: new Types.ObjectId(authorId),
+  });
+
     
     const savedPost = await post.save();
-    
+    console.log(savedPost)
     // Если есть изображение, можно запустить обработку (ресайз и т.д.)
     if (createPostDto.imageUrl) {
       // Асинхронно: создать миниатюры, оптимизировать и т.д.
@@ -38,7 +65,10 @@ export class PostsService {
     
     return savedPost;
   }
+
   
+  
+
   private async processImage(postId: string, imageUrl: string) {
     // Здесь можно:
     // 1. Создать миниатюру
@@ -149,6 +179,18 @@ export class PostsService {
     }
 
     Object.assign(post, updatePostDto);
+if (updatePostDto.content) {}
+const nonDomenContent = this.normalizeContentImageUrls(updatePostDto.content);
+      const newContent = this.sanitizeHtml(updatePostDto.content, { /* ... */ });
+  const newImageUrls = extractContentImageUrls(newContent);
+  const oldImageUrls = post.contentImages || [];
+
+  // Удаляем файлы, которых больше нет в новом контенте
+  oldImageUrls.forEach(url => {
+    if (!newImageUrls.includes(url)) {
+      deleteFileByUrl(url);
+    }
+  });
     return post.save();
   }
 
@@ -165,6 +207,14 @@ export class PostsService {
     if (post.author.toString() !== userId) {
       throw new ForbiddenException('Нет прав для удаления этого поста');
     }
+
+      // Удаляем обложку, если она есть
+  if (post.imageUrl) {
+    deleteFileByUrl(post.imageUrl);
+  }
+
+  // Удаляем все изображения из контента
+  (post.contentImages || []).forEach(url => deleteFileByUrl(url));
 
     await post.deleteOne();
   }
