@@ -179,8 +179,8 @@ async create(createPostDto: CreatePostDto, authorId: string) {
     }
 
     Object.assign(post, updatePostDto);
-if (updatePostDto.content) {}
-const nonDomenContent = this.normalizeContentImageUrls(updatePostDto.content);
+if (updatePostDto.content) {
+  const nonDomenContent = this.normalizeContentImageUrls(updatePostDto.content);
       const newContent = this.sanitizeHtml(updatePostDto.content, { /* ... */ });
   const newImageUrls = extractContentImageUrls(newContent);
   const oldImageUrls = post.contentImages || [];
@@ -191,6 +191,11 @@ const nonDomenContent = this.normalizeContentImageUrls(updatePostDto.content);
       deleteFileByUrl(url);
     }
   });
+
+  post.content = newContent;
+  post.contentImages = newImageUrls;
+}
+
     return post.save();
   }
 
