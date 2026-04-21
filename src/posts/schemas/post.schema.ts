@@ -44,11 +44,25 @@ export class Post extends Document {
     type: [String]
   })
   contentImages: string[];
+  // ---------- НОВОЕ: ПОЛЕ ЛАЙКОВ ----------
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'User' }],
+    default: [],
+    index: true,// 1️⃣ индекс для быстрой проверки "лайкал ли юзер"
+  })
+  likes: Types.ObjectId[];
+
+  // ---------- НОВОЕ: ДЕНОРМАЛИЗОВАННЫЙ СЧЁТЧИК ----------
+  @Prop({
+    default: 0,
+    index: true,// 2️⃣ индекс для сортировки по популярности
+  })
+  likesCount: number;
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
 
-// Виртуальное поле для получения комментариев
+// Виртуальное поле для комментариев
 PostSchema.virtual('comments', {
   ref: 'Comment',
   localField: '_id',
@@ -56,6 +70,9 @@ PostSchema.virtual('comments', {
   options: { sort: { createdAt: -1 } },
 });
 
-// Индексы для оптимизации запросов
+// ---------- ИНДЕКСЫ ----------
 PostSchema.index({ author: 1, createdAt: -1 });
 PostSchema.index({ title: 'text', content: 'text' });
+
+// 🔥 Основной индекс для выдачи "популярных" записей
+PostSchema.index({ likesCount: -1, createdAt: -1 });

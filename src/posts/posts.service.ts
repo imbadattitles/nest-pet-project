@@ -169,33 +169,48 @@ async create(createPostDto: CreatePostDto, authorId: string) {
    */
   async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PostDocument> {
     const post = await this.postModel.findById(id);
-
-    if (!post) {
-      throw new NotFoundException('Пост не найден');
+    if (!post) throw new NotFoundException('Пост не найден');
+    if (post.author.toString() !== userId) throw new ForbiddenException('Нет прав для редактирования');
+  
+    // Обработка контента
+    if (updatePostDto.content) {
+      // 1. Убираем домен из src
+      const nonDomenContent = this.normalizeContentImageUrls(updatePostDto.content);
+      // 2. Санитизация
+      const cleanContent = this.sanitizeHtml(nonDomenContent, {
+        allowedTags: this.sanitizeHtml.defaults.allowedTags.concat(['img']),
+        allowedAttributes: {
+          ...this.sanitizeHtml.defaults.allowedAttributes,
+          img: ['src', 'alt', 'width', 'height']
+        },
+        allowedSchemes: ['http', 'https', 'data']
+      });
+      // 3. Извлечение URL
+      const newImageUrls = extractContentImageUrls(cleanContent);
+      const oldImageUrls = post.contentImages || [];
+  
+      // 4. Удаление неиспользуемых файлов
+      oldImageUrls.forEach(url => {
+        if (!newImageUrls.includes(url)) {
+          deleteFileByUrl(url);
+        }
+      });
+  
+      // 5. Присваиваем очищенный контент и новый массив URL
+      updatePostDto.content = cleanContent;
+      post.contentImages = newImageUrls;
     }
-
-    if (post.author.toString() !== userId) {
-      throw new ForbiddenException('Нет прав для редактирования этого поста');
+  
+    // Обработка обложки (если загружена новая)
+    if (updatePostDto.imageUrl) {
+      if (post.imageUrl) {
+        deleteFileByUrl(post.imageUrl);
+      }
+      this.processImage(post._id.toString(), updatePostDto.imageUrl);
     }
-
+  
+    // Применяем остальные поля (title и т.д.)
     Object.assign(post, updatePostDto);
-if (updatePostDto.content) {
-  const nonDomenContent = this.normalizeContentImageUrls(updatePostDto.content);
-      const newContent = this.sanitizeHtml(updatePostDto.content, { /* ... */ });
-  const newImageUrls = extractContentImageUrls(newContent);
-  const oldImageUrls = post.contentImages || [];
-
-  // Удаляем файлы, которых больше нет в новом контенте
-  oldImageUrls.forEach(url => {
-    if (!newImageUrls.includes(url)) {
-      deleteFileByUrl(url);
-    }
-  });
-
-  post.content = newContent;
-  post.contentImages = newImageUrls;
-}
-
     return post.save();
   }
 
@@ -258,5 +273,31 @@ if (updatePostDto.content) {
   async updateCommentsCount(postId: string): Promise<void> {
     const count = await this.commentsService.getCommentsCount(postId);
     await this.postModel.findByIdAndUpdate(postId, { commentsCount: count });
+  }
+
+
+  async toggleLike(postId: string, userId: string): Promise<{ liked: boolean; likesCount: number }> {
+    const userObjectId = new Types.ObjectId(userId);
+  
+    // Сначала пытаемся добавить лайк
+    const addResult = await this.postModel.updateOne(
+      { _id: postId, likes: { $ne: userObjectId } },
+      { $addToSet: { likes: userObjectId }, $inc: { likesCount: 1 } }
+    );
+  
+    // Если добавили (modifiedCount > 0), значит раньше лайка не было
+    if (addResult.modifiedCount > 0) {
+      const post = await this.postModel.findById(postId).select('likesCount').lean();
+      return { liked: true, likesCount: post?.likesCount || 0 };
+    }
+  
+    // Иначе лайк уже был — удаляем
+    await this.postModel.updateOne(
+      { _id: postId },
+      { $pull: { likes: userObjectId }, $inc: { likesCount: -1 } }
+    );
+  
+    const post = await this.postModel.findById(postId).select('likesCount').lean();
+    return { liked: false, likesCount: post?.likesCount || 0 };
   }
 }

@@ -74,6 +74,12 @@ export class PostsController {
     return this.postsService.findAll(page, limit, search, authorId);
   }
 
+  @Patch(':id/toggle-like')
+  @UseGuards(AccessTokenGuard)
+  toggleLike(@Param('id') postId: string, @Req() req) {
+    return this.postsService.toggleLike(postId, req.user.id);
+  }
+
   @Get('my-posts')
   @UseGuards(AccessTokenGuard)
   findMyPosts(
@@ -91,11 +97,26 @@ export class PostsController {
 
   @Patch(':id')
   @UseGuards(AccessTokenGuard)
+  @UseInterceptors(FileInterceptor('image', {
+    storage: diskStorage({
+      destination: './uploads/posts',
+      filename: editFileName,
+    }),
+    fileFilter: imageFileFilter,
+    limits: {
+      files: 1,
+      fileSize: 5 * 1024 * 1024, // 5MB
+    },
+  }))
   update(
     @Param('id') id: string,
     @Body() updatePostDto: UpdatePostDto,
+    @UploadedFile() file: Express.Multer.File,
     @Req() req,
   ) {
+    if (file) {
+      updatePostDto.imageUrl = `/uploads/posts/${file.filename}`
+    }
     return this.postsService.update(id, updatePostDto, req.user.id);
   }
 
