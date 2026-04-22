@@ -4,10 +4,12 @@ import { User } from '../../users/schemas/user.schema';
 import { Dialog } from './dialog.schema';
 import { TimestampDocument } from 'src/types/mongoose.types';
 
-export type MessageDocument = HydratedDocument<Message & {
-  createdAt: Date;
-  updatedAt: Date;
-}>;
+export type MessageDocument = HydratedDocument<
+  Message & {
+    createdAt: Date;
+    updatedAt: Date;
+  }
+>;
 
 class ReadBy {
   @Prop({ type: Types.ObjectId, ref: 'User' })
@@ -87,14 +89,14 @@ export const MessageSchema = SchemaFactory.createForClass(Message);
 MessageSchema.set('toJSON', { virtuals: true });
 MessageSchema.set('toObject', { virtuals: true });
 MessageSchema.virtual('sender', {
-  ref: 'User',           // ссылаемся на модель User
+  ref: 'User', // ссылаемся на модель User
   localField: 'senderId', // поле в текущей модели
-  foreignField: '_id',    // поле в модели User
-  justOne: true          // так как это один пользователь, а не массив
+  foreignField: '_id', // поле в модели User
+  justOne: true, // так как это один пользователь, а не массив
 });
 
 // Индексы
 MessageSchema.index({ dialogId: 1, createdAt: -1 });
 MessageSchema.index({ senderId: 1 });
 MessageSchema.index({ mentions: 1 });
-MessageSchema.index({ dialogId: 1, "isDeleted.userId": 1, createdAt: -1 });
+MessageSchema.index({ dialogId: 1, 'isDeleted.userId': 1, createdAt: -1 });

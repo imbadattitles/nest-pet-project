@@ -29,34 +29,42 @@ export class PostsController {
 
   @Post()
   @UseGuards(AccessTokenGuard)
-  @UseInterceptors(FileInterceptor('image', {
-    storage: diskStorage({
-      destination: './uploads/posts',
-      filename: editFileName,
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: diskStorage({
+        destination: './uploads/posts',
+        filename: editFileName,
+      }),
+      fileFilter: imageFileFilter,
+      limits: {
+        files: 1,
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
     }),
-    fileFilter: imageFileFilter,
-    limits: {
-      files: 1,
-      fileSize: 5 * 1024 * 1024, // 5MB
-    },
-  }))
-  create(@Body() createPostDto: CreatePostDto, @UploadedFile() file: Express.Multer.File, @Req() req) {
+  )
+  create(
+    @Body() createPostDto: CreatePostDto,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req,
+  ) {
     if (file) {
-      createPostDto.imageUrl = `/uploads/posts/${file.filename}`
+      createPostDto.imageUrl = `/uploads/posts/${file.filename}`;
     }
     return this.postsService.create(createPostDto, req.user.id);
   }
 
   @Post('upload-content-image')
   @UseGuards(AccessTokenGuard)
-  @UseInterceptors(FileInterceptor('image', {
-    storage: diskStorage({
-      destination: './uploads/content',
-      filename: editFileName,
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: diskStorage({
+        destination: './uploads/content',
+        filename: editFileName,
+      }),
+      fileFilter: imageFileFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
     }),
-    fileFilter: imageFileFilter,
-    limits: { fileSize: 5 * 1024 * 1024 }
-  }))
+  )
   uploadContentImage(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Файл не загружен');
     // Можно сразу создать миниатюры при необходимости
@@ -66,14 +74,19 @@ export class PostsController {
   @Get()
   @UseGuards(AccessTokenGuard)
   findAll(
-    
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('author') authorId?: string,
     @Req() req?,
   ) {
-    return this.postsService.findAll(page, limit, search, authorId, req?.user?.id);
+    return this.postsService.findAll(
+      page,
+      limit,
+      search,
+      authorId,
+      req?.user?.id,
+    );
   }
 
   @Patch(':id/toggle-like')
@@ -89,7 +102,12 @@ export class PostsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.postsService.findByAuthor(req.user.id, page, limit, req.user.id);
+    return this.postsService.findByAuthor(
+      req.user.id,
+      page,
+      limit,
+      req.user.id,
+    );
   }
 
   @Get(':id')
@@ -100,17 +118,19 @@ export class PostsController {
 
   @Patch(':id')
   @UseGuards(AccessTokenGuard)
-  @UseInterceptors(FileInterceptor('image', {
-    storage: diskStorage({
-      destination: './uploads/posts',
-      filename: editFileName,
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: diskStorage({
+        destination: './uploads/posts',
+        filename: editFileName,
+      }),
+      fileFilter: imageFileFilter,
+      limits: {
+        files: 1,
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
     }),
-    fileFilter: imageFileFilter,
-    limits: {
-      files: 1,
-      fileSize: 5 * 1024 * 1024, // 5MB
-    },
-  }))
+  )
   update(
     @Param('id') id: string,
     @Body() updatePostDto: UpdatePostDto,
@@ -118,7 +138,7 @@ export class PostsController {
     @Req() req,
   ) {
     if (file) {
-      updatePostDto.imageUrl = `/uploads/posts/${file.filename}`
+      updatePostDto.imageUrl = `/uploads/posts/${file.filename}`;
     }
     return this.postsService.update(id, updatePostDto, req.user.id);
   }

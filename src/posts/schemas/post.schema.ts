@@ -17,6 +17,13 @@ export class Post extends Document {
   title: string;
 
   @Prop({
+    required: [true, 'Описание обязательно'],
+    trim: true,
+    maxlength: [500, 'Описание должно быть максимум 500 символов'],
+  })
+  about: string;
+
+  @Prop({
     required: [true, 'Содержание обязательно'],
     minlength: [10, 'Содержание должно быть минимум 10 символов'],
   })
@@ -30,7 +37,7 @@ export class Post extends Document {
   author: Types.ObjectId;
 
   @Prop({
-    default: null
+    default: null,
   })
   imageUrl: string;
 
@@ -41,21 +48,21 @@ export class Post extends Document {
 
   @Prop({
     default: [],
-    type: [String]
+    type: [String],
   })
   contentImages: string[];
   // ---------- НОВОЕ: ПОЛЕ ЛАЙКОВ ----------
   @Prop({
     type: [{ type: Types.ObjectId, ref: 'User' }],
     default: [],
-    index: true,// 1️⃣ индекс для быстрой проверки "лайкал ли юзер"
+    index: true, // 1️⃣ индекс для быстрой проверки "лайкал ли юзер"
   })
   likes: Types.ObjectId[];
 
   // ---------- НОВОЕ: ДЕНОРМАЛИЗОВАННЫЙ СЧЁТЧИК ----------
   @Prop({
     default: 0,
-    index: true,// 2️⃣ индекс для сортировки по популярности
+    index: true, // 2️⃣ индекс для сортировки по популярности
   })
   likesCount: number;
 }

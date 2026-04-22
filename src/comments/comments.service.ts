@@ -1,5 +1,12 @@
 import { AppGateway } from './../gateway/app.gateway';
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Comment, CommentDocument } from './schemas/comment.schema';
@@ -10,23 +17,30 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
-      @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway
+    @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway,
   ) {}
 
   /**
    * Создание комментария
    */
-  async create(createCommentDto: CreateCommentDto, authorId: string): Promise<CommentDocument> {
+  async create(
+    createCommentDto: CreateCommentDto,
+    authorId: string,
+  ): Promise<CommentDocument> {
     // Проверяем, существует ли родительский комментарий
     if (createCommentDto.parentCommentId) {
-      const parentComment = await this.commentModel.findById(createCommentDto.parentCommentId);
+      const parentComment = await this.commentModel.findById(
+        createCommentDto.parentCommentId,
+      );
       if (!parentComment) {
         throw new BadRequestException('Родительский комментарий не найден');
       }
-      
+
       // Проверяем, что родительский комментарий принадлежит тому же посту
       if (parentComment.post.toString() !== createCommentDto.postId) {
-        throw new BadRequestException('Родительский комментарий не относится к этому посту');
+        throw new BadRequestException(
+          'Родительский комментарий не относится к этому посту',
+        );
       }
     }
 
@@ -34,19 +48,19 @@ export class CommentsService {
       content: createCommentDto.content,
       author: new Types.ObjectId(authorId),
       post: new Types.ObjectId(createCommentDto.postId),
-      parentComment: createCommentDto.parentCommentId 
-        ? new Types.ObjectId(createCommentDto.parentCommentId) 
+      parentComment: createCommentDto.parentCommentId
+        ? new Types.ObjectId(createCommentDto.parentCommentId)
         : null,
     });
 
     const savedComment = await comment.save();
-    
+
     // Загружаем автора для отправки
     await savedComment.populate('author', 'username email avatar');
-    
+
     // Отправляем через WebSocket
     this.appGateway.sendNewComment(createCommentDto.postId, savedComment);
-    
+
     return savedComment;
   }
 
@@ -86,7 +100,7 @@ export class CommentsService {
 
     // Для каждого корневого комментария рекурсивно получаем все ответы
     const commentsWithReplies = await Promise.all(
-      rootComments.map(comment => this.buildCommentTree(comment)),
+      rootComments.map((comment) => this.buildCommentTree(comment)),
     );
 
     return {
@@ -105,7 +119,10 @@ export class CommentsService {
   /**
    * Рекурсивное построение дерева комментариев
    */
-  private async buildCommentTree(comment: any, depth: number = 0): Promise<any> {
+  private async buildCommentTree(
+    comment: any,
+    depth: number = 0,
+  ): Promise<any> {
     // Защита от бесконечной рекурсии (макс глубина 10)
     if (depth > 10) {
       return {
@@ -127,7 +144,7 @@ export class CommentsService {
 
     // Рекурсивно получаем ответы на ответы
     const repliesWithNested = await Promise.all(
-      replies.map(reply => this.buildCommentTree(reply, depth + 1)),
+      replies.map((reply) => this.buildCommentTree(reply, depth + 1)),
     );
 
     return {
@@ -174,12 +191,16 @@ export class CommentsService {
 
     // Проверяем, что пользователь - автор комментария
     if (comment.author.toString() !== userId) {
-      throw new ForbiddenException('Нет прав для редактирования этого комментария');
+      throw new ForbiddenException(
+        'Нет прав для редактирования этого комментария',
+      );
     }
 
     // Нельзя изменить пост или родительский комментарий
     if (updateCommentDto.postId || updateCommentDto.parentCommentId) {
-      throw new BadRequestException('Нельзя изменить пост или родительский комментарий');
+      throw new BadRequestException(
+        'Нельзя изменить пост или родительский комментарий',
+      );
     }
 
     comment.content = updateCommentDto.content || comment.content;
@@ -223,11 +244,11 @@ export class CommentsService {
     }
 
     const userIdObj = new Types.ObjectId(userId);
-    const hasLiked = comment.likes.some(id => id.toString() === userId);
+    const hasLiked = comment.likes.some((id) => id.toString() === userId);
 
     if (hasLiked) {
       // Убираем лайк
-      comment.likes = comment.likes.filter(id => id.toString() !== userId);
+      comment.likes = comment.likes.filter((id) => id.toString() !== userId);
       comment.likesCount = Math.max(0, comment.likesCount - 1);
     } else {
       // Добавляем лайк
@@ -267,9 +288,9 @@ export class CommentsService {
         .skip(skip)
         .limit(limit)
         .lean(),
-      this.commentModel.countDocuments({ 
-        author: new Types.ObjectId(userId), 
-        isDeleted: false 
+      this.commentModel.countDocuments({
+        author: new Types.ObjectId(userId),
+        isDeleted: false,
       }),
     ]);
 

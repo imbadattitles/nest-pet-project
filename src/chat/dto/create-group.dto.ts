@@ -1,5 +1,5 @@
-import { IsArray, IsMongoId, IsOptional, IsString } from "class-validator";
-import { Types } from "mongoose";
+import { IsArray, IsMongoId, IsOptional, IsString } from 'class-validator';
+import { Types } from 'mongoose';
 
 export class CreateGroupDto {
   @IsString()

@@ -11,7 +11,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private usersService: UsersService,
   ) {
     const secret = configService.get<string>('jwt.secret');
-    
+
     if (!secret) {
       throw new Error('JWT_SECRET не определен в конфигурации');
     }
@@ -28,6 +28,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException('Пользователь не найден');
     }
-    return { id: payload.sub, email: payload.email, username: payload.username };
+    return {
+      id: payload.sub,
+      email: payload.email,
+      username: payload.username,
+    };
   }
 }

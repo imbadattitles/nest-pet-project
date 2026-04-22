@@ -1,4 +1,9 @@
-import { forwardRef, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../../users/users.service'; // ваш сервис пользователей
 import { ConfigService } from '@nestjs/config';
@@ -20,7 +25,7 @@ export class JwtWsService {
 
       // Находим пользователя как в вашей стратегии
       const user = await this.usersService.findMyProfile(payload.sub);
-      
+
       if (!user) {
         throw new UnauthorizedException('Пользователь не найден');
       }
@@ -30,7 +35,6 @@ export class JwtWsService {
         id: payload.sub,
         email: payload.email,
         username: payload.username,
-        
       };
     } catch (error) {
       throw new UnauthorizedException('Invalid token');

@@ -9,7 +9,7 @@ import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
 import { WebsocketModule } from './gateway/gateway.module';
 import { ChatModule } from './chat/chat.module';
-import { BullModule } from '@nestjs/bull'
+import { BullModule } from '@nestjs/bull';
 import { RedisModule } from './globalServices/redis.module';
 import { CommandsModule } from './commands/commands.module';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -43,9 +43,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
 
     // Rate limiting
-    ThrottlerModule.forRoot([  
+    ThrottlerModule.forRoot([
       {
-        ttl: 60000, 
+        ttl: 60000,
         limit: 100,
       },
     ]),
@@ -58,7 +58,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     CommentsModule,
     WebsocketModule,
     ChatModule,
-    CommandsModule
+    CommandsModule,
   ],
   // exports: [BullModule]
 })

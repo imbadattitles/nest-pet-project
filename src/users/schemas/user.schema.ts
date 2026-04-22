@@ -31,6 +31,13 @@ export class User extends Document {
   username: string;
 
   @Prop({
+    required: false,
+    trim: true,
+    maxlength: [500, 'Описание должно быть максимум 500 символов'],
+  })
+  about: string;
+
+  @Prop({
     required: [true, 'Пароль обязателен'],
     minlength: [6, 'Пароль должен быть минимум 6 символов'],
     select: false,
@@ -38,9 +45,9 @@ export class User extends Document {
   password: string;
 
   @Prop({
-    required: false
+    required: false,
   })
-  avatar: string
+  avatar: string;
 
   @Prop({
     type: [String],
@@ -68,10 +75,9 @@ UserSchema.pre<UserDocument>('save', async function () {
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-  } catch (error) {
-  }
+  } catch (error) {}
 });
-UserSchema.pre<Query<any, UserDocument>>('findOneAndUpdate', async function() {
+UserSchema.pre<Query<any, UserDocument>>('findOneAndUpdate', async function () {
   const update = this.getUpdate() as any;
   if (update?.password) {
     const salt = await bcrypt.genSalt(10);

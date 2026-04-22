@@ -4,10 +4,12 @@ import { User } from '../../users/schemas/user.schema';
 import { Message } from './message.schema';
 import { HydratedDocument } from 'mongoose';
 
-export type DialogDocument = HydratedDocument<Dialog & {
-  createdAt: Date;
-  updatedAt: Date;
-}>;
+export type DialogDocument = HydratedDocument<
+  Dialog & {
+    createdAt: Date;
+    updatedAt: Date;
+  }
+>;
 
 @Schema({
   timestamps: true,
@@ -39,21 +41,27 @@ export class Dialog extends Document {
   unreadCount: Map<string, number>;
 
   @Prop({ type: Map, of: Object, default: {} })
-  userSettings: Map<string, {
-    muted: boolean;
-    pinned: boolean;
-    nickname?: string;
-    joinedAt: Date;
-  }>;
+  userSettings: Map<
+    string,
+    {
+      muted: boolean;
+      pinned: boolean;
+      nickname?: string;
+      joinedAt: Date;
+    }
+  >;
 
   @Prop({ default: true })
   isActive: boolean;
 
   @Prop({ type: Map, of: Object, select: false, default: {} })
-  usersStatus: Map<string, {
-    dialogDelete: boolean;
-    notifications: boolean;
-  }>;
+  usersStatus: Map<
+    string,
+    {
+      dialogDelete: boolean;
+      notifications: boolean;
+    }
+  >;
 }
 
 export const DialogSchema = SchemaFactory.createForClass(Dialog);
@@ -61,9 +69,8 @@ export const DialogSchema = SchemaFactory.createForClass(Dialog);
 // Индексы
 DialogSchema.index({ participants: 1 });
 DialogSchema.index({ type: 1, participants: 1 });
-DialogSchema.index({ 
-  participants: 1, 
+DialogSchema.index({
+  participants: 1,
   'usersStatus.dialogDelete': 1,
-  'usersStatus.notifications': 1 
+  'usersStatus.notifications': 1,
 });
-

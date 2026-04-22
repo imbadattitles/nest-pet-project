@@ -10,9 +10,9 @@ import { WebsocketModule } from 'src/gateway/gateway.module';
 @Module({
   imports: [
     MongooseModule.forFeature([
-        { name: User.name, schema: UserSchema },
-        { name: Dialog.name, schema: DialogSchema },
-        { name: Message.name, schema: MessageSchema }
+      { name: User.name, schema: UserSchema },
+      { name: Dialog.name, schema: DialogSchema },
+      { name: Message.name, schema: MessageSchema },
     ]),
     forwardRef(() => WebsocketModule),
   ],

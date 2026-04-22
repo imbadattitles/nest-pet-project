@@ -6,13 +6,16 @@ import { Request } from 'express';
 import { UsersService } from '../../users/users.service';
 
 @Injectable()
-export class AccessTokenStrategy extends PassportStrategy(Strategy, 'jwt-access') {
+export class AccessTokenStrategy extends PassportStrategy(
+  Strategy,
+  'jwt-access',
+) {
   constructor(
     private configService: ConfigService,
     private usersService: UsersService,
   ) {
     const secret = configService.get<string>('jwt.access.secret');
-    
+
     if (!secret) {
       throw new Error('JWT_ACCESS_SECRET не определен');
     }
@@ -34,7 +37,7 @@ export class AccessTokenStrategy extends PassportStrategy(Strategy, 'jwt-access'
     if (!user) {
       throw new UnauthorizedException('Пользователь не найден');
     }
-    
+
     return {
       id: payload.sub,
       email: payload.email,

@@ -6,13 +6,16 @@ import { Request } from 'express';
 import { RefreshTokenService } from '../refresh-token.service';
 
 @Injectable()
-export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
+export class RefreshTokenStrategy extends PassportStrategy(
+  Strategy,
+  'jwt-refresh',
+) {
   constructor(
     private configService: ConfigService,
     private refreshTokenService: RefreshTokenService,
   ) {
     const secret = configService.get<string>('jwt.refresh.secret');
-    
+
     if (!secret) {
       throw new Error('JWT_REFRESH_SECRET не определен');
     }
@@ -36,7 +39,8 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
     }
 
     // Проверяем валидность refresh токена в БД
-    const userId = await this.refreshTokenService.validateRefreshToken(refreshToken);
+    const userId =
+      await this.refreshTokenService.validateRefreshToken(refreshToken);
     // console.log(userId)
     return {
       id: userId,

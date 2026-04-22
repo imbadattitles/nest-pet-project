@@ -11,9 +11,9 @@ import { TempResetService } from 'src/auth/temp-reset.service';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-    PostsModule,
+    forwardRef(() => PostsModule),
     forwardRef(() => WebsocketModule),
-    ChatModule
+    ChatModule,
   ],
   controllers: [UsersController],
   providers: [UsersService, TempResetService],

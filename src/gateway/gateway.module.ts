@@ -19,7 +19,9 @@ import { ChatModule } from 'src/chat/chat.module';
         // console.log('JWT Secret loaded:', secret ? 'Yes' : 'No');
         return {
           secret: secret,
-          signOptions: { expiresIn: configService.get('jwt.access.expiresIn') || '15m' },
+          signOptions: {
+            expiresIn: configService.get('jwt.access.expiresIn') || '15m',
+          },
         };
       },
       inject: [ConfigService],
@@ -27,7 +29,7 @@ import { ChatModule } from 'src/chat/chat.module';
     forwardRef(() => UsersModule), // 👈 КЛЮЧЕВОЙ МОМЕНТ: добавляем UsersModule в imports
     forwardRef(() => PostsModule),
     forwardRef(() => CommentsModule),
-    forwardRef(() => ChatModule)
+    forwardRef(() => ChatModule),
   ],
   providers: [
     AppGateway,

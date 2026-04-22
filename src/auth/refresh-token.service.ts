@@ -3,7 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { RefreshToken, RefreshTokenDocument } from './schemas/refresh-token.schema';
+import {
+  RefreshToken,
+  RefreshTokenDocument,
+} from './schemas/refresh-token.schema';
 
 @Injectable()
 export class RefreshTokenService {
@@ -24,17 +27,18 @@ export class RefreshTokenService {
   ): Promise<string> {
     // Создаем payload
     const payload = { sub: userId };
-    
+
     // Получаем секрет и время жизни
     const secret = this.configService.get<string>('jwt.refresh.secret');
-    const expiresIn = this.configService.get<string>('jwt.refresh.expiresIn') || '7d';
-    
+    const expiresIn =
+      this.configService.get<string>('jwt.refresh.expiresIn') || '7d';
+
     // ВАЖНО: Сначала создаем options объект
     const options: any = {
       secret: secret,
       expiresIn: expiresIn,
     };
-    
+
     // Затем вызываем sign
     const token = this.jwtService.sign(payload, options);
 
@@ -61,7 +65,7 @@ export class RefreshTokenService {
   async validateRefreshToken(token: string): Promise<string> {
     try {
       const secret = this.configService.get<string>('jwt.refresh.secret');
-      
+
       // Проверяем JWT подпись
       const payload = this.jwtService.verify(token, {
         secret: secret,
@@ -85,15 +89,14 @@ export class RefreshTokenService {
       return payload.sub;
     } catch (error) {
       console.error('Refresh token validation error:', error);
-      
+
       if (error.name === 'TokenExpiredError') {
         // Токен истек - помечаем в БД
-        await this.refreshTokenModel.updateOne(
-          { token },
-          { isValid: false, revokedAt: new Date() }
-        ).exec();
+        await this.refreshTokenModel
+          .updateOne({ token }, { isValid: false, revokedAt: new Date() })
+          .exec();
       }
-      
+
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -102,13 +105,15 @@ export class RefreshTokenService {
    * Инвалидация refresh токена
    */
   async revokeRefreshToken(token: string): Promise<void> {
-    await this.refreshTokenModel.updateOne(
-      { token },
-      {
-        isValid: false,
-        revokedAt: new Date(),
-      }
-    ).exec();
+    await this.refreshTokenModel
+      .updateOne(
+        { token },
+        {
+          isValid: false,
+          revokedAt: new Date(),
+        },
+      )
+      .exec();
   }
 
   /**
@@ -119,11 +124,16 @@ export class RefreshTokenService {
     const value = parseInt(expiresIn.slice(0, -1), 10);
 
     switch (unit) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default: return 7 * 24 * 60 * 60 * 1000;
+      case 's':
+        return value * 1000;
+      case 'm':
+        return value * 60 * 1000;
+      case 'h':
+        return value * 60 * 60 * 1000;
+      case 'd':
+        return value * 24 * 60 * 60 * 1000;
+      default:
+        return 7 * 24 * 60 * 60 * 1000;
     }
   }
 }
