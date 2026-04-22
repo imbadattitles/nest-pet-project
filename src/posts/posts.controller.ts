@@ -66,12 +66,14 @@ export class PostsController {
   @Get()
   @UseGuards(AccessTokenGuard)
   findAll(
+    
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('author') authorId?: string,
+    @Req() req?,
   ) {
-    return this.postsService.findAll(page, limit, search, authorId);
+    return this.postsService.findAll(page, limit, search, authorId, req?.user?.id);
   }
 
   @Patch(':id/toggle-like')
@@ -87,12 +89,13 @@ export class PostsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
-    return this.postsService.findByAuthor(req.user.id, page, limit);
+    return this.postsService.findByAuthor(req.user.id, page, limit, req.user.id);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.postsService.findOneWithComments(id);
+  @UseGuards(AccessTokenGuard)
+  findOne(@Param('id') id: string, @Req() req) {
+    return this.postsService.findOneWithComments(id, 1, 20, req?.user?.id);
   }
 
   @Patch(':id')

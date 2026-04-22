@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument, Query } from 'mongoose';
+import { Document, HydratedDocument, Query, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 
 export type UserDocument = HydratedDocument<User>;
@@ -49,6 +49,13 @@ export class User extends Document {
     ref: 'User',
   })
   contacts: string[]; // Список ID друзей или контактов
+
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'Post' }],
+    default: [],
+    index: true,
+  })
+  savedPosts: Types.ObjectId[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

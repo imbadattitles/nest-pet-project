@@ -1,7 +1,8 @@
 // import { sanitizeHtml } from 'sanitize-html';
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, HydratedDocument } from 'mongoose';
+import { Model, Schema, Types, model } from 'mongoose';
+
 import { Post, PostDocument } from './schemas/post.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -26,6 +27,111 @@ export class PostsService {
    */
 
   sanitizeHtml = require('sanitize-html');
+
+  private buildPostAggregationPipeline(
+  filter: Record<string, any>,
+  options: {
+    page: number;
+    limit: number;
+    sort?: Record<string, 1 | -1>;
+    userId?: string;
+    populateAuthor?: boolean;
+    projectLikes?: boolean;
+    addSavedFlag?: boolean;
+  }
+): any[] {
+  const {
+    page,
+    limit,
+    sort = { createdAt: -1 },
+    userId,
+    populateAuthor = true,
+    projectLikes = true,
+    addSavedFlag = false,
+  } = options;
+
+  const pipeline: any[] = [];
+
+  // 1. Фильтрация
+  pipeline.push({ $match: filter });
+
+  // 2. Сортировка
+  pipeline.push({ $sort: sort });
+
+  // 3. Пагинация
+  pipeline.push({ $skip: (page - 1) * limit });
+  pipeline.push({ $limit: limit });
+
+  // 4. Флаги взаимодействия пользователя
+  if (userId) {
+    const userObjectId = new Types.ObjectId(userId);
+
+    // likedByMe
+    pipeline.push({
+      $addFields: {
+        likedByMe: {
+          $in: [userObjectId, { $ifNull: ['$likes', []] }]
+        }
+      }
+    });
+
+    // isSaved (если нужно)
+    if (addSavedFlag) {
+      pipeline.push({
+        $lookup: {
+          from: 'users',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { _id: userObjectId } },
+            {
+              $project: {
+                isSaved: {
+                  $in: ['$$postId', { $ifNull: ['$savedPosts', []] }]
+                }
+              }
+            }
+          ],
+          as: 'userSavedInfo'
+        }
+      });
+      pipeline.push({
+        $addFields: {
+          isSaved: { $ifNull: [{ $arrayElemAt: ['$userSavedInfo.isSaved', 0] }, false] }
+        }
+      });
+      pipeline.push({ $project: { userSavedInfo: 0 } });
+    }
+  } else {
+    // Без userId — флаги false
+    const falseFlags: any = { likedByMe: false };
+    if (addSavedFlag) falseFlags.isSaved = false;
+    pipeline.push({ $addFields: falseFlags });
+  }
+
+  // 5. Убираем массив likes (опционально)
+  if (!projectLikes) {
+    pipeline.push({ $project: { likes: 0 } });
+  }
+
+  // 6. Populate автора
+  if (populateAuthor) {
+    pipeline.push(
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'author',
+          foreignField: '_id',
+          as: 'author'
+        }
+      },
+      { $unwind: '$author' },
+      { $project: { 'author.password': 0, 'author.__v': 0 } }
+    );
+  }
+
+  return pipeline;
+}
+
   private normalizeContentImageUrls(html: string): string {
   // Заменяем http(s)://домен/ на / во всех src изображений
   return html.replace(/(<img[^>]+src=")([^"]+)("[^>]*>)/gi, (match, p1, src, p3) => {
@@ -79,63 +185,117 @@ async create(createPostDto: CreatePostDto, authorId: string) {
   /**
    * Получение всех постов с пагинацией
    */
-  async findAll(page = 1, limit = 10, search?: string, authorId?: string) {
-    const skip = (page - 1) * limit;
+async findAll(page = 1, limit = 10, search?: string, authorId?: string, userId?: string) {
+  const filter: Record<string, any> = {};
 
-    const query: any = {};
-
-    if (search) {
-      query.$text = { $search: search };
-    }
-
-    if (authorId && Types.ObjectId.isValid(authorId)) {
-      query.author = new Types.ObjectId(authorId);
-    }
-
-    const [posts, total] = await Promise.all([
-      this.postModel
-        .find(query)
-        .populate<{ author: IAuthor }>('author', 'username email')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      this.postModel.countDocuments(query),
-    ]);
-
-    return {
-      posts,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+  if (search) {
+    filter.$text = { $search: search };
   }
+
+  if (authorId && Types.ObjectId.isValid(authorId)) {
+    filter.author = new Types.ObjectId(authorId);
+  }
+
+  // Пайплайн для получения постов
+  const pipeline = this.buildPostAggregationPipeline(filter, {
+    page,
+    limit,
+    userId,
+    populateAuthor: true,
+    projectLikes: false, // или false, чтобы скрыть likes
+    addSavedFlag: !!userId
+  });
+
+  const posts = await this.postModel.aggregate(pipeline).exec();
+
+  // Отдельный запрос для подсчёта total (можно также через агрегацию с $count)
+  const total = await this.postModel.countDocuments(filter);
+
+  return {
+    posts,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+      hasNext: page < Math.ceil(total / limit),
+      hasPrev: page > 1,
+    },
+  };
+}
 
   /**
    * Получение одного поста
    */
-  async findOne(id: string): Promise<PostDocument> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('Неверный формат ID поста');
-    }
-
-    const post = await this.postModel
-      .findById(id)
-      .populate('author', 'username email')
-      .lean()
-      .exec();
-
-    if (!post) {
-      throw new NotFoundException('Пост не найден');
-    }
-
-    return post;
+async findOne(id: string, userId?: string): Promise<any> {
+  if (!Types.ObjectId.isValid(id)) {
+    throw new NotFoundException('Неверный формат ID поста');
   }
+
+  const pipeline: any[] = [
+    { $match: { _id: new Types.ObjectId(id) } },
+  ];
+
+  if (userId) {
+    const userObjectId = new Types.ObjectId(userId);
+    
+    // likedByMe
+    pipeline.push({
+      $addFields: {
+        likedByMe: {
+          $in: [userObjectId, { $ifNull: ['$likes', []] }],
+        },
+      },
+    });
+
+    // isSaved с защитой от отсутствия поля savedPosts
+    pipeline.push({
+      $lookup: {
+        from: 'users',
+        let: { postId: '$_id' },
+        pipeline: [
+          { $match: { _id: userObjectId } },
+          {
+            $project: {
+              isSaved: {
+                $in: ['$$postId', { $ifNull: ['$savedPosts', []] }]
+              }
+            }
+          }
+        ],
+        as: 'userSavedInfo',
+      },
+    });
+    pipeline.push({
+      $addFields: {
+        isSaved: { $ifNull: [{ $arrayElemAt: ['$userSavedInfo.isSaved', 0] }, false] },
+      },
+    });
+    pipeline.push({ $project: { userSavedInfo: 0 } });
+  } else {
+    pipeline.push({ $addFields: { likedByMe: false, isSaved: false } });
+  }
+
+  // lookup автора
+  pipeline.push(
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'author',
+        foreignField: '_id',
+        as: 'author',
+      },
+    },
+    { $unwind: '$author' },
+    { $project: { 'author.password': 0 } }
+  );
+
+  const results = await this.postModel.aggregate(pipeline).exec();
+  if (!results.length) {
+    throw new NotFoundException('Пост не найден');
+  }
+  return results[0];
+}
 
   /**
    * Получение поста с комментариями (с явным типом)
@@ -143,10 +303,11 @@ async create(createPostDto: CreatePostDto, authorId: string) {
   async findOneWithComments(
     id: string, 
     page = 1, 
-    limit = 20
+    limit = 20,
+    userId?: string
   ): Promise<IPostWithComments> {
     // Получаем пост
-    const post = await this.findOne(id) as any;
+    const post = await this.findOne(id, userId) as any;
 
     // Получаем комментарии к посту
     const comments = await this.commentsService.getPostComments(id, page, limit, 'newest');
@@ -242,30 +403,25 @@ async create(createPostDto: CreatePostDto, authorId: string) {
   /**
    * Получение постов автора
    */
-  async findByAuthor(authorId: string, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
+async findByAuthor(authorId: string, page = 1, limit = 10, userId?: string) {
+  const filter = { author: new Types.ObjectId(authorId) };
+  const pipeline = this.buildPostAggregationPipeline(filter, { page, limit, userId, populateAuthor: true, addSavedFlag: !!userId });
 
-    const [posts, total] = await Promise.all([
-      this.postModel
-        .find({ author: new Types.ObjectId(authorId) })
-        .populate<{ author: IAuthor }>('author', 'username email')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      this.postModel.countDocuments({ author: new Types.ObjectId(authorId) }),
-    ]);
+  const [posts, total] = await Promise.all([
+    this.postModel.aggregate(pipeline).exec(),
+    this.postModel.countDocuments(filter),
+  ]);
 
-    return {
-      posts,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    };
-  }
+  return {
+    posts,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  };
+}
 
   /**
    * Обновление счетчика комментариев

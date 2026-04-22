@@ -3,7 +3,7 @@ import { AppGateway } from './../gateway/app.gateway';
 import { CurrentUser } from './../common/decorators/current-user.decorator';
 import { Injectable, ConflictException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { RecoveryException, ValidationException } from 'src/common/expections/custom-exceptions';
 import { ErrorCode } from 'src/common/expections/error-codes';
@@ -160,5 +160,27 @@ export class UsersService {
       await this.userModel.findByIdAndUpdate(userId, { password: ChangePasswordDto.password });
       await this.tempResetService.delete(ChangePasswordDto.tempUserId);
     }
+  }
+
+  async toggleSavePost(userId: string, postId: string): Promise<{ saved: boolean }> {
+    const user = await this.userModel.findById(userId).select('savedPosts');
+    const postObjectId = new Types.ObjectId(postId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const isSaved = user.savedPosts.some(id => id.equals(postObjectId));
+
+    if (isSaved) {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $pull: { savedPosts: postObjectId } }
+      );
+    } else {
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $addToSet: { savedPosts: postObjectId } }
+      );
+    }
+    return { saved: !isSaved };
   }
 }
