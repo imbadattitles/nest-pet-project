@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsArray, IsMongoId, MaxLength, ArrayMaxSize } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsMongoId,
+  MaxLength,
+  ArrayMaxSize,
+} from 'class-validator';
 import { Types } from 'mongoose';
 
 export class CreateMessageDto {

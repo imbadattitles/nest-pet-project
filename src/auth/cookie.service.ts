@@ -10,13 +10,17 @@ export class CookieService {
    * Установка access token в httpOnly куку
    */
   setAccessTokenCookie(res: Response, token: string): void {
-    const expiresIn = this.configService.get<string>('jwt.access.expiresIn') as string;
+    const expiresIn = this.configService.get<string>(
+      'jwt.access.expiresIn',
+    ) as string;
     const maxAge = this.parseExpiresInToMs(expiresIn);
 
     res.cookie('access_token', token, {
       httpOnly: true,
       secure: false,
-      sameSite: this.configService.get<'lax' | 'strict' | 'none'>('cookie.sameSite'),
+      sameSite: this.configService.get<'lax' | 'strict' | 'none'>(
+        'cookie.sameSite',
+      ),
       domain: 'localhost',
       maxAge,
       path: '/',
@@ -27,12 +31,16 @@ export class CookieService {
    * Установка refresh token в httpOnly куку
    */
   setRefreshTokenCookie(res: Response, token: string): void {
-    const expiresIn = this.configService.get<string>('jwt.refresh.expiresIn') as string;
+    const expiresIn = this.configService.get<string>(
+      'jwt.refresh.expiresIn',
+    ) as string;
     const maxAge = this.parseExpiresInToMs(expiresIn);
     res.cookie('refresh_token', token, {
       httpOnly: true,
       secure: false,
-      sameSite: this.configService.get<'lax' | 'strict' | 'none'>('cookie.sameSite'),
+      sameSite: this.configService.get<'lax' | 'strict' | 'none'>(
+        'cookie.sameSite',
+      ),
       domain: 'localhost',
       maxAge,
       path: '/api/auth/refresh', // Только для refresh маршрута
@@ -46,7 +54,9 @@ export class CookieService {
     res.clearCookie('access_token', {
       httpOnly: true,
       secure: this.configService.get<boolean>('cookie.secure'),
-      sameSite: this.configService.get<'lax' | 'strict' | 'none'>('cookie.sameSite'),
+      sameSite: this.configService.get<'lax' | 'strict' | 'none'>(
+        'cookie.sameSite',
+      ),
       domain: this.configService.get<string>('cookie.domain'),
       path: '/',
     });
@@ -54,7 +64,9 @@ export class CookieService {
     res.clearCookie('refresh_token', {
       httpOnly: true,
       secure: this.configService.get<boolean>('cookie.secure'),
-      sameSite: this.configService.get<'lax' | 'strict' | 'none'>('cookie.sameSite'),
+      sameSite: this.configService.get<'lax' | 'strict' | 'none'>(
+        'cookie.sameSite',
+      ),
       domain: this.configService.get<string>('cookie.domain'),
       path: '/api/auth/refresh',
     });
@@ -68,11 +80,16 @@ export class CookieService {
     const value = parseInt(expiresIn.slice(0, -1), 10);
 
     switch (unit) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default: return 15 * 60 * 1000; // 15 минут по умолчанию для access
+      case 's':
+        return value * 1000;
+      case 'm':
+        return value * 60 * 1000;
+      case 'h':
+        return value * 60 * 60 * 1000;
+      case 'd':
+        return value * 24 * 60 * 60 * 1000;
+      default:
+        return 15 * 60 * 1000; // 15 минут по умолчанию для access
     }
   }
 }

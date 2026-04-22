@@ -7,14 +7,14 @@ export function extractContentImageUrls(html: string): string[] {
   const $ = cheerio.load(html);
   const urls: string[] = [];
   $('img').each((_, el) => {
-    console.log(el)
+    console.log(el);
     const src = $(el).attr('src');
     if (src && src.startsWith('/uploads/content/')) {
-      console.log(src)
+      console.log(src);
       urls.push(src);
     }
   });
-  console.log(urls)
+  console.log(urls);
   return urls;
 }
 

@@ -13,16 +13,16 @@ export class CleanupCommand {
   async run() {
     console.log('🔍 Поиск файлов-сирот...');
     const result = await this.cleanupService.cleanupOrphanFiles();
-    
+
     console.log(`✅ Удалено файлов: ${result.deleted.length}`);
     if (result.deleted.length > 0) {
       console.log('Удалённые файлы:');
-      result.deleted.forEach(f => console.log(`  - ${f}`));
+      result.deleted.forEach((f) => console.log(`  - ${f}`));
     }
-    
+
     if (result.errors.length > 0) {
       console.log(`❌ Ошибок: ${result.errors.length}`);
-      result.errors.forEach(e => console.log(`  - ${e}`));
+      result.errors.forEach((e) => console.log(`  - ${e}`));
     }
   }
 }

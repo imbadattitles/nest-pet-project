@@ -21,7 +21,12 @@ export class EmailService {
       throw new EmailException(
         ErrorCode.EMAIL_SERVICE_NOT_CONFIGURED,
         'Email service not configured properly',
-        { missingFields: [!emailUser ? 'EMAIL_USER' : '', !emailPassword ? 'EMAIL_PASSWORD' : ''].filter(Boolean) }
+        {
+          missingFields: [
+            !emailUser ? 'EMAIL_USER' : '',
+            !emailPassword ? 'EMAIL_PASSWORD' : '',
+          ].filter(Boolean),
+        },
       );
     }
 
@@ -52,7 +57,6 @@ export class EmailService {
       });
 
       this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
-      
     } catch (error) {
       this.errorHandler(error);
     }
@@ -70,25 +74,24 @@ export class EmailService {
       });
 
       this.logger.log(`Email sent to ${to}, messageId: ${info.messageId}`);
-      
     } catch (error) {
       this.errorHandler(error);
     }
   }
-  private validationHandler (to: string, code: string) {
+  private validationHandler(to: string, code: string) {
     if (!to || !this.isValidEmail(to)) {
       throw new EmailException(
         ErrorCode.EMAIL_INVALID_FORMAT,
         'Invalid email format',
-        { email: to }
+        { email: to },
       );
     }
-    
+
     if (!code || !/^\d{6}$/.test(code)) {
       throw new EmailException(
         ErrorCode.EMAIL_SENDING_FAILED,
         'Invalid verification code format',
-        { code }
+        { code },
       );
     }
   }
@@ -98,44 +101,42 @@ export class EmailService {
     if (error instanceof EmailException) {
       throw error;
     }
-    
+
     if (error.code === 'EAUTH') {
       throw new EmailException(
         ErrorCode.EMAIL_AUTH_FAILED,
         'Authentication failed',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
-    
+
     if (error.code === 'EENVELOPE') {
       throw new EmailException(
         ErrorCode.EMAIL_RECIPIENT_REJECTED,
         'Recipient rejected',
-        { rejected: error.rejected, originalError: error.message }
+        { rejected: error.rejected, originalError: error.message },
       );
     }
-    
+
     if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
       throw new EmailException(
         ErrorCode.EMAIL_CONNECTION_FAILED,
         'Connection failed',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
-    
+
     if (error.responseCode === 550) {
       throw new EmailException(
         ErrorCode.EMAIL_POLICY_REJECTION,
         'Policy rejection',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
-    
-    throw new EmailException(
-      ErrorCode.EMAIL_SENDING_FAILED,
-      error.message,
-      { originalError: error.message }
-    );
+
+    throw new EmailException(ErrorCode.EMAIL_SENDING_FAILED, error.message, {
+      originalError: error.message,
+    });
   }
   private isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/;

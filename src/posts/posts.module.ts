@@ -8,7 +8,7 @@ import { CommentsModule } from 'src/comments/comments.module';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Post.name, schema: PostSchema }]),
-    CommentsModule
+    CommentsModule,
   ],
   controllers: [PostsController],
   providers: [PostsService],

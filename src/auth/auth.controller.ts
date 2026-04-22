@@ -1,10 +1,10 @@
-import { 
-  Controller, 
-  Post, 
-  Body, 
-  UseGuards, 
-  Get, 
-  Req, 
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Get,
+  Req,
   Res,
   HttpCode,
   HttpStatus,
@@ -55,7 +55,10 @@ export class AuthController {
 
   @Post('verify-password-recovery')
   @HttpCode(HttpStatus.OK)
-  async verifyPasswordRecovery(@Body('tempUserId') tempUserId: string, @Body('code') code: string) {
+  async verifyPasswordRecovery(
+    @Body('tempUserId') tempUserId: string,
+    @Body('code') code: string,
+  ) {
     return this.authService.verifyResetPassword(tempUserId, code);
   }
 
@@ -81,10 +84,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     return this.authService.logout(req, res);
   }
 

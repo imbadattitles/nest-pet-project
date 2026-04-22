@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
@@ -13,14 +18,16 @@ export class WsJwtGuard implements CanActivate {
     private configService: ConfigService,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
+  canActivate(
+    context: ExecutionContext,
+  ): boolean | Promise<boolean> | Observable<boolean> {
     // console.log(context)
     const client: Socket = context.switchToWs().getClient();
-    
+
     try {
       // 1. Пробуем получить токен
       const token = this.extractToken(client);
-      
+
       if (!token) {
         this.logger.warn('❌ WebSocket: нет токена');
         return false;
@@ -40,7 +47,6 @@ export class WsJwtGuard implements CanActivate {
 
       this.logger.log(`✅ WebSocket аутентифицирован: ${payload.username}`);
       return true;
-      
     } catch (error) {
       this.logger.error(`❌ Ошибка аутентификации WebSocket: ${error.message}`);
       return false;

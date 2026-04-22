@@ -6,10 +6,9 @@ export class ChangePasswordDto {
   tempUserId?: string;
 
   @IsString()
-  password: string
+  password: string;
 
   @IsString()
   @IsOptional()
   from?: 'reset' | 'change';
-
 }
