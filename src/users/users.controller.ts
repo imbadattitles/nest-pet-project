@@ -15,6 +15,11 @@ import {
   UseInterceptors,
   UploadedFile,
   Delete,
+  Patch,
+<<<<<<< HEAD
+=======
+  Patch,
+>>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -135,6 +140,15 @@ export class UsersController {
     };
   }
 
+  @Patch('me/toggle-save-post')
+  @UseGuards(AccessTokenGuard)
+  async toggleSavePost(
+    @CurrentUser() currentUser: any,
+    @Body() data: { postId: string },
+  ) {
+    return await this.usersService.toggleSavePost(currentUser.id, data.postId);
+  }
+
   @Put('me/profile')
   @UseGuards(AccessTokenGuard)
   async changeMyProfile(@CurrentUser() currentUser: any, @Body() data: any) {
@@ -191,6 +205,19 @@ export class UsersController {
     };
   }
 
+<<<<<<< HEAD
+=======
+  @Get('me/saved-posts')
+  @UseGuards(AccessTokenGuard)
+  async getMySavedPosts(
+    @CurrentUser() user: any,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.postsService.findSavedPosts(user.id, page, limit);
+  }
+
+>>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
   /**
    * Получение постов пользователя
    * GET /api/users/:id/posts

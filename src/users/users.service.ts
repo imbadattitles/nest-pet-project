@@ -52,8 +52,15 @@ export class UsersService {
     return this.userModel.findOne({ email }).select('+password').exec();
   }
 
-  async findById(id: string): Promise<UserDocument | null> {
-    return this.userModel.findById(id).exec();
+  async findById(
+    id: string,
+    exec: boolean = true,
+  ): Promise<UserDocument | null> {
+    if (exec) {
+      return this.userModel.findById(id).exec();
+    } else {
+      return this.userModel.findById(id);
+    }
   }
 
   async findMyProfile(

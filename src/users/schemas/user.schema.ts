@@ -31,6 +31,13 @@ export class User extends Document {
   username: string;
 
   @Prop({
+    required: false,
+    trim: true,
+    maxlength: [500, 'Описание должно быть максимум 500 символов'],
+  })
+  about: string;
+
+  @Prop({
     required: [true, 'Пароль обязателен'],
     minlength: [6, 'Пароль должен быть минимум 6 символов'],
     select: false,

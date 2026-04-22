@@ -3,6 +3,11 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+<<<<<<< HEAD
+=======
+  forwardRef,
+  Inject,
+>>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Schema, Types, model } from 'mongoose';
@@ -14,16 +19,22 @@ import { CommentsService } from '../comments/comments.service';
 import {
   IPostWithComments,
   IAuthor,
+<<<<<<< HEAD
   ICommentWithAuthor,
   IApiResponse,
+=======
+>>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
 } from './interfaces/post-with-comments.interface';
 import { deleteFileByUrl, extractContentImageUrls } from './utils/image.utils';
+import { User, UserDocument } from 'src/users/schemas/user.schema';
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
     private commentsService: CommentsService,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
   /**
@@ -218,6 +229,7 @@ export class PostsService {
       projectLikes: false, // или false, чтобы скрыть likes
       addSavedFlag: !!userId,
     });
+    pipeline.push({ $project: { content: 0 } }); // исключаем content
 
     const posts = await this.postModel.aggregate(pipeline).exec();
 
@@ -320,7 +332,7 @@ export class PostsService {
     userId?: string,
   ): Promise<IPostWithComments> {
     // Получаем пост
-    const post = (await this.findOne(id, userId)) as any;
+    const post = await this.findOne(id, userId);
 
     // Получаем комментарии к посту
     const comments = await this.commentsService.getPostComments(
@@ -462,6 +474,39 @@ export class PostsService {
     await this.postModel.findByIdAndUpdate(postId, { commentsCount: count });
   }
 
+<<<<<<< HEAD
+=======
+  async findSavedPosts(userId: string, page = 1, limit = 20) {
+    // 1. Получаем массив savedPosts пользователя (только ID)
+    const user = await this.userModel
+      .findById(userId)
+      .select('savedPosts')
+      .lean();
+    const savedIds = user?.savedPosts || [];
+
+    // 2. Фильтр для постов
+    const filter = { _id: { $in: savedIds } };
+
+    // 3. Используем общий билдер пайплайна
+    const pipeline = this.buildPostAggregationPipeline(filter, {
+      page,
+      limit,
+      userId,
+      populateAuthor: true,
+      projectLikes: true,
+      addSavedFlag: true, // чтобы подсветить, что они уже сохранены
+    });
+
+    const posts = await this.postModel.aggregate(pipeline);
+    const total = savedIds.length;
+
+    return {
+      data: posts,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    };
+  }
+
+>>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
   async toggleLike(
     postId: string,
     userId: string,

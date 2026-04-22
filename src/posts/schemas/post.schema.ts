@@ -17,6 +17,13 @@ export class Post extends Document {
   title: string;
 
   @Prop({
+    required: [true, 'Описание обязательно'],
+    trim: true,
+    maxlength: [500, 'Описание должно быть максимум 500 символов'],
+  })
+  about: string;
+
+  @Prop({
     required: [true, 'Содержание обязательно'],
     minlength: [10, 'Содержание должно быть минимум 10 символов'],
   })
