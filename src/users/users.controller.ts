@@ -16,10 +16,6 @@ import {
   UploadedFile,
   Delete,
   Patch,
-<<<<<<< HEAD
-=======
-  Patch,
->>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -109,16 +105,7 @@ export class UsersController {
     @CurrentUser() currentUser: any,
     @Body() data: { userId: string },
   ) {
-    return await this.usersService.addContact(currentUser, data);
-  }
-
-  @Delete('me/contacts')
-  @UseGuards(AccessTokenGuard)
-  async removeContact(
-    @CurrentUser() currentUser: any,
-    @Body() data: { userId: string },
-  ) {
-    return await this.usersService.removeContact(currentUser, data);
+    return await this.usersService.toggleContact(currentUser, data);
   }
 
   /**
@@ -152,8 +139,6 @@ export class UsersController {
   @Put('me/profile')
   @UseGuards(AccessTokenGuard)
   async changeMyProfile(@CurrentUser() currentUser: any, @Body() data: any) {
-    // console.log(currentUser)
-    // console.log(data)
     const user = await this.usersService.update(currentUser.id, data);
 
     return {
@@ -205,8 +190,6 @@ export class UsersController {
     };
   }
 
-<<<<<<< HEAD
-=======
   @Get('me/saved-posts')
   @UseGuards(AccessTokenGuard)
   async getMySavedPosts(
@@ -217,7 +200,6 @@ export class UsersController {
     return this.postsService.findSavedPosts(user.id, page, limit);
   }
 
->>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
   /**
    * Получение постов пользователя
    * GET /api/users/:id/posts

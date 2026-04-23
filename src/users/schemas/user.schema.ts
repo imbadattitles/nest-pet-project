@@ -23,12 +23,18 @@ export class User extends Document {
 
   @Prop({
     required: [true, 'Имя пользователя обязательно'],
-    unique: true,
-    trim: true,
     minlength: [3, 'Имя пользователя должно быть минимум 3 символа'],
     maxlength: [20, 'Имя пользователя должно быть максимум 20 символов'],
   })
   username: string;
+
+  @Prop({
+    unique: true,
+    trim: true,
+    minlength: [5, 'Имя пользователя должно быть минимум 5 символов'],
+    maxlength: [20, 'Имя пользователя должно быть максимум 20 символов'],
+  })
+  nickname: string;
 
   @Prop({
     required: false,

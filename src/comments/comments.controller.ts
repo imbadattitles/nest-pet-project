@@ -34,13 +34,21 @@ export class CommentsController {
    * Получение комментариев к посту
    */
   @Get('post/:postId')
+  @UseGuards(AccessTokenGuard)
   async getPostComments(
     @Param('postId') postId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Query('sort') sortBy: 'newest' | 'oldest' | 'popular' = 'newest',
+    @Req() req,
   ) {
-    return this.commentsService.getPostComments(postId, page, limit, sortBy);
+    return this.commentsService.getPostComments(
+      postId,
+      page,
+      limit,
+      sortBy,
+      req?.user?.id,
+    );
   }
 
   /**

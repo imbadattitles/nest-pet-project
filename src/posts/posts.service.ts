@@ -3,11 +3,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-<<<<<<< HEAD
-=======
   forwardRef,
   Inject,
->>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Schema, Types, model } from 'mongoose';
@@ -19,11 +16,6 @@ import { CommentsService } from '../comments/comments.service';
 import {
   IPostWithComments,
   IAuthor,
-<<<<<<< HEAD
-  ICommentWithAuthor,
-  IApiResponse,
-=======
->>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
 } from './interfaces/post-with-comments.interface';
 import { deleteFileByUrl, extractContentImageUrls } from './utils/image.utils';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
@@ -340,6 +332,7 @@ export class PostsService {
       page,
       limit,
       'newest',
+      userId,
     );
 
     // Формируем ответ с правильным типом
@@ -474,8 +467,6 @@ export class PostsService {
     await this.postModel.findByIdAndUpdate(postId, { commentsCount: count });
   }
 
-<<<<<<< HEAD
-=======
   async findSavedPosts(userId: string, page = 1, limit = 20) {
     // 1. Получаем массив savedPosts пользователя (только ID)
     const user = await this.userModel
@@ -506,7 +497,6 @@ export class PostsService {
     };
   }
 
->>>>>>> ed0c0d71c603f3730f8e3f0138e9ce7a1bd02cd4
   async toggleLike(
     postId: string,
     userId: string,

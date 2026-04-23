@@ -98,29 +98,45 @@ export class UsersService {
     };
   }
 
-  async addContact(
+  async toggleContact(
     currentUser: { id: string },
     data: { userId: string },
   ): Promise<{ success: boolean; data: string[]; message: string }> {
-    const user = await this.findMyProfile(currentUser.id, false);
+    // Получаем пользователя БЕЗ populate (contacts как простой массив строк)
+    const user = await this.userModel
+      .findById(currentUser.id)
+      .select('+contacts');
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
-    console.log(user);
-    if (!user.contacts.includes(data.userId)) {
-      user.contacts.push(data.userId);
-      this.AppGateway.sendNotification(
-        data.userId,
-        `У вас новый подписчик: ${currentUser.id}`,
-      );
-      await user.save();
-    }
 
-    return {
-      success: true,
-      data: user.contacts,
-      message: 'Контакт добавлен',
-    };
+    const contactId = data.userId;
+    const isContactExists = user.contacts.includes(contactId);
+
+    if (isContactExists) {
+      // Удаляем контакт
+      user.contacts = user.contacts.filter((id) => id !== contactId);
+      await user.save();
+      return {
+        success: true,
+        data: user.contacts,
+        message: 'Контакт удалён',
+      };
+    } else {
+      // Добавляем контакт
+      user.contacts.push(contactId);
+      await user.save();
+      // Уведомляем другого пользователя (если нужно)
+      this.AppGateway.sendNotification(
+        contactId,
+        `Пользователь ${currentUser.id} добавил вас в контакты.`,
+      );
+      return {
+        success: true,
+        data: user.contacts,
+        message: 'Контакт добавлен',
+      };
+    }
   }
 
   async removeContact(
@@ -166,6 +182,17 @@ export class UsersService {
         ErrorCode.GO_FUCK_YOURSELF,
         'GO_FUCK_YOURSELF',
       );
+    }
+
+    if (updateData.nickname) {
+      const existingNickname = await this.userModel.findOne({
+        nickname: updateData.nickname,
+      });
+      if (existingNickname) {
+        throw new ConflictException(
+          'Пользователь с таким nickname уже существует',
+        );
+      }
     }
 
     return this.userModel

@@ -72,15 +72,14 @@ export class CommentsService {
     page = 1,
     limit = 20,
     sortBy: 'newest' | 'oldest' | 'popular' = 'newest',
+    userId?: string, // <-- добавляем userId
   ) {
     const skip = (page - 1) * limit;
 
-    // Определяем сортировку
     let sort: any = { createdAt: -1 };
     if (sortBy === 'oldest') sort = { createdAt: 1 };
     if (sortBy === 'popular') sort = { likesCount: -1, createdAt: -1 };
 
-    // Получаем только корневые комментарии (без parent)
     const query = {
       post: new Types.ObjectId(postId),
       parentComment: null,
@@ -98,41 +97,36 @@ export class CommentsService {
       this.commentModel.countDocuments(query),
     ]);
 
-    // Для каждого корневого комментария рекурсивно получаем все ответы
+    // Передаём userId в buildCommentTree
     const commentsWithReplies = await Promise.all(
-      rootComments.map((comment) => this.buildCommentTree(comment)),
+      rootComments.map((comment) => this.buildCommentTree(comment, 0, userId)),
     );
 
     return {
       comments: commentsWithReplies,
       pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
+        /* ... */
       },
     };
   }
 
-  /**
-   * Рекурсивное построение дерева комментариев
-   */
   private async buildCommentTree(
     comment: any,
     depth: number = 0,
+    userId?: string,
   ): Promise<any> {
-    // Защита от бесконечной рекурсии (макс глубина 10)
     if (depth > 10) {
       return {
         ...comment,
         replies: [],
-        _hasMoreReplies: true, // Флаг, что есть еще ответы
+        _hasMoreReplies: true,
+        likedByMe: userId
+          ? comment.likes?.some((id: any) => id.toString() === userId)
+          : false,
       };
     }
 
-    // Получаем прямые ответы на этот комментарий
+    // Получаем прямые ответы
     const replies = await this.commentModel
       .find({
         parentComment: comment._id,
@@ -142,15 +136,20 @@ export class CommentsService {
       .sort({ createdAt: 1 })
       .lean();
 
-    // Рекурсивно получаем ответы на ответы
     const repliesWithNested = await Promise.all(
-      replies.map((reply) => this.buildCommentTree(reply, depth + 1)),
+      replies.map((reply) => this.buildCommentTree(reply, depth + 1, userId)),
     );
+
+    // Добавляем likedByMe для текущего комментария
+    const likedByMe = userId
+      ? comment.likes?.some((id: any) => id.toString() === userId)
+      : false;
 
     return {
       ...comment,
       replies: repliesWithNested,
       _replyCount: repliesWithNested.length,
+      likedByMe, // <-- вот оно
     };
   }
 

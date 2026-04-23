@@ -126,11 +126,13 @@ export class ChatService {
     dialogId: Types.ObjectId,
     userId: Types.ObjectId,
   ): Promise<any> {
-    const dialog = await this.dialogModel.findById(dialogId);
+    const dialog = await this.dialogModel
+      .findById(dialogId)
+      .select('+usersStatus');
     if (!dialog) return;
 
     dialog.participants.forEach((participant) => {
-      const userStatus = dialog.usersStatus.get(participant.toString());
+      const userStatus = dialog?.usersStatus?.get(participant.toString());
       dialog.usersStatus.set(participant.toString(), {
         notifications: userStatus?.notifications ?? false,
         dialogDelete: true,
@@ -167,24 +169,9 @@ export class ChatService {
         $addToSet: { deletedBy: userId },
       },
     );
-  }
 
-  async deleteMessagesArrayForAll(
-    dialogId: Types.ObjectId,
-    messageIds: Types.ObjectId[],
-    actingUserId: Types.ObjectId,
-  ): Promise<any> {
-    const dialog = await this.dialogModel.findById(dialogId);
-    if (!dialog) return;
-    await this.markArrayMessageAsDeleted(
-      messageIds,
-      dialog.participants,
-      actingUserId,
-    );
-    await this.appGateway.messagesDeleted(dialogId.toString(), messageIds);
-    return {
-      success: true,
-    };
+    // Обновляем unreadCount для удалившего
+    await this.recalcUnreadCount(message.dialogId, userId);
   }
 
   async deleteMessagesArrayForMe(
@@ -194,14 +181,47 @@ export class ChatService {
   ): Promise<any> {
     const dialog = await this.dialogModel.findById(dialogId);
     if (!dialog) return;
+
     await this.markArrayMessageAsDeleted(
       messageIds,
       [actingUserId],
       actingUserId,
     );
-    return {
-      success: true,
-    };
+
+    await this.recalcUnreadCount(dialogId, actingUserId);
+
+    return { success: true };
+  }
+
+  // 5. deleteMessagesArrayForAll – пересчитываем для всех участников
+  async deleteMessagesArrayForAll(
+    dialogId: Types.ObjectId,
+    messageIds: Types.ObjectId[],
+    actingUserId: Types.ObjectId,
+  ): Promise<any> {
+    const dialog = await this.dialogModel.findById(dialogId);
+    if (!dialog) return;
+
+    await this.markArrayMessageAsDeleted(
+      messageIds,
+      dialog.participants,
+      actingUserId,
+    );
+
+    // Пересчитываем unreadCount для каждого участника
+    await Promise.all(
+      dialog.participants.map((userId) =>
+        this.recalcUnreadCount(dialogId, userId),
+      ),
+    );
+
+    await this.appGateway.messagesDeleted(
+      dialogId.toString(),
+      messageIds,
+      actingUserId,
+    );
+
+    return { success: true };
   }
 
   private async markArrayMessageAsDeleted(
@@ -228,9 +248,11 @@ export class ChatService {
     dialogId: Types.ObjectId,
     userId: Types.ObjectId,
   ): Promise<void> {
-    const dialog = await this.dialogModel.findById(dialogId);
+    const dialog = await this.dialogModel
+      .findById(dialogId)
+      .select('+usersStatus');
     if (dialog) {
-      const currentStatus = dialog.usersStatus.get(userId.toString());
+      const currentStatus = dialog?.usersStatus?.get(userId.toString());
       dialog?.usersStatus.set(userId.toString(), {
         notifications: currentStatus?.notifications ?? false,
         dialogDelete: true,
@@ -326,7 +348,7 @@ export class ChatService {
     userId: Types.ObjectId,
   ): Promise<void> {
     try {
-      const result = await this.messageModel.updateOne(
+      await this.messageModel.updateOne(
         {
           _id: messageId,
           'readBy.userId': { $ne: userId },
@@ -336,22 +358,15 @@ export class ChatService {
           $pull: { pendingFor: userId },
         },
       );
+
       await this.appGateway.messageAsRead(
         dialogId.toString(),
         messageId,
         userId,
       );
 
-      const unreadCount = await this.messageModel.countDocuments({
-        dialogId: dialogId,
-        'readBy.userId': { $ne: userId },
-        pendingFor: userId,
-      });
-
-      await this.dialogModel.updateOne(
-        { _id: dialogId },
-        { $set: { [`unreadCount.${userId}`]: unreadCount } },
-      );
+      // Единый пересчёт (использует find + save)
+      await this.recalcUnreadCount(dialogId, userId);
     } catch (error) {
       console.log(error);
     }
@@ -483,5 +498,24 @@ export class ChatService {
     });
 
     return message.save();
+  }
+
+  private async recalcUnreadCount(
+    dialogId: Types.ObjectId,
+    userId: Types.ObjectId,
+  ): Promise<void> {
+    const unreadCount = await this.messageModel.countDocuments({
+      dialogId,
+      [`isDeleted.${userId.toString()}`]: { $ne: true },
+      'readBy.userId': { $ne: userId },
+      isSystem: { $ne: true }, // системные сообщения не считаем
+    });
+
+    // Загружаем диалог и меняем Map правильно
+    const dialog = await this.dialogModel.findById(dialogId);
+    if (dialog) {
+      dialog.unreadCount.set(userId.toString(), unreadCount);
+      await dialog.save();
+    }
   }
 }
