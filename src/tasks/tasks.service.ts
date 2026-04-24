@@ -8,8 +8,8 @@ export class TasksService {
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleOrphanCleanup() {
-    console.log('Запуск ежедневной очистки файлов-сирот...');
+    //console.log('Запуск ежедневной очистки файлов-сирот...');
     const result = await this.cleanupService.cleanupOrphanFiles();
-    console.log(`Очистка завершена. Удалено ${result.deleted.length} файлов.`);
+    //console.log(`Очистка завершена. Удалено ${result.deleted.length} файлов.`);
   }
 }

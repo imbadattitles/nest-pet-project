@@ -119,7 +119,7 @@ export class ChatController {
       mimeType: file.mimetype,
       type: file.type, // 'image', 'video', 'audio', 'document'
     }));
-    console.log(attachmentsData);
+    // console.log(attachmentsData);
     return this.chatService.sendMessage(req.user.id, {
       ...dto,
       dialogId: new Types.ObjectId(dialogId),

@@ -368,7 +368,7 @@ export class ChatService {
       // Единый пересчёт (использует find + save)
       await this.recalcUnreadCount(dialogId, userId);
     } catch (error) {
-      console.log(error);
+      //console.log(error);
     }
   }
   async getMessages(
@@ -430,11 +430,12 @@ export class ChatService {
             dialogId: conv._id,
             [`isDeleted.${userId}`]: { $ne: true },
           })
+          .sort({ createdAt: -1 })
           .populate('sender', 'username avatar')
           .populate('replyTo')
           .populate('mentions', 'username')
           .exec();
-        console.log('lastMessage', lastMessage);
+        //console.log('lastMessage', lastMessage);
 
         return {
           _id: conv._id,
@@ -517,5 +518,39 @@ export class ChatService {
       dialog.unreadCount.set(userId.toString(), unreadCount);
       await dialog.save();
     }
+  }
+  async getUserContactsAndDialogsUsers(userId: string): Promise<string[]> {
+    const user = await this.userModel
+      .findById(userId)
+      .select('+contacts')
+      .lean();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const dialogs = await this.getUserDialogs(userId);
+
+    // Извлекаем ID участников: если есть поле _id (документ), берём его,
+    // иначе предполагаем, что это ObjectId и вызываем toString()
+    const participantsFromDialogs = dialogs.flatMap((dialog) =>
+      dialog.participants.map((p) => {
+        // Если p – документ Mongoose, у него будет _id
+        return (p as any)._id ? (p as any)._id.toString() : p.toString();
+      }),
+    );
+
+    const contactsIds = (user.contacts ?? []).map((c) =>
+      // После .lean() c может быть ObjectId, toString() даст строку
+      c.toString(),
+    );
+
+    const uniqueIds = new Set<string>([
+      ...contactsIds,
+      ...participantsFromDialogs,
+    ]);
+    uniqueIds.delete(userId);
+
+    return Array.from(uniqueIds);
   }
 }

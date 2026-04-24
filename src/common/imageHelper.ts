@@ -104,7 +104,7 @@ export const createUploadConfig = (
     if (!fs.existsSync(fullPath)) {
       fs.mkdirSync(fullPath, { recursive: true });
     }
-    console.log(destination);
+    //console.log(destination);
 
     callback(null, destination); // Возвращаем ./uploads/messages/images
   };

@@ -15,7 +15,7 @@ export class EmailService {
     const emailHost = this.configService.get<string>('email.host');
     const emailPort = this.configService.get<number>('email.port');
     const emailSecure = this.configService.get<boolean>('email.secure');
-    console.log(emailUser, emailPassword, emailHost, emailPort, emailSecure);
+    //console.log(emailUser, emailPassword, emailHost, emailPort, emailSecure);
     if (!emailUser || !emailPassword) {
       this.logger.error('Email service not configured properly');
       throw new EmailException(

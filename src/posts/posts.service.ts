@@ -166,7 +166,7 @@ export class PostsService {
     });
 
     const contentImages = extractContentImageUrls(cleanContent);
-    console.log(contentImages);
+    //console.log(contentImages);
     const post = new this.postModel({
       ...createPostDto,
       content: cleanContent,
@@ -175,7 +175,7 @@ export class PostsService {
     });
 
     const savedPost = await post.save();
-    console.log(savedPost);
+    //console.log(savedPost);
     // Если есть изображение, можно запустить обработку (ресайз и т.д.)
     if (createPostDto.imageUrl) {
       // Асинхронно: создать миниатюры, оптимизировать и т.д.

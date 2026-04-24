@@ -41,12 +41,12 @@ export class CleanupService {
 
     posts.forEach((post) => {
       if (post.imageUrl) usedUrls.add(post.imageUrl);
-      console.log(post.contentImages);
+      //console.log(post.contentImages);
       if (post.contentImages && Array.isArray(post.contentImages)) {
         post.contentImages.forEach((url) => usedUrls.add(url));
       }
     });
-    console.log(usedUrls);
+    //console.log(usedUrls);
     // Папки для проверки
     const uploadsDir = path.join(process.cwd(), 'uploads');
     const foldersToCheck = ['posts', 'content'].map((f) =>
@@ -76,7 +76,7 @@ export class CleanupService {
         }
       }
     }
-    console.log(deleted);
+    //console.log(deleted);
     return { deleted, errors };
   }
 }
