@@ -178,6 +178,10 @@ export class NotificationsService {
       .findById(postId)
       .select('author title')
       .lean();
+    const user = await this.userModel
+      .findById(userId)
+      .select('username')
+      .lean();
     if (!post) return;
     await this.addNotification(
       post?.author.toString(),
@@ -185,12 +189,38 @@ export class NotificationsService {
       commentId,
       {
         user: userId,
+        username: user?.username,
         post: postId,
         postTitle: post?.title,
         content: content.slice(0, 100),
       },
       userId,
     );
+  }
+
+  async postLikeNotification(postId: string, userId: string): Promise<void> {
+    const post = await this.postModel
+      .findById(postId)
+      .select('likesCount author title')
+      .lean();
+    const user = await this.userModel
+      .findById(userId)
+      .select('username')
+      .lean();
+    if (post?.author) {
+      await this.addNotification(
+        post?.author,
+        'postLike',
+        postId,
+        {
+          user: userId,
+          username: user?.username,
+          post: postId,
+          postTitle: post?.title,
+        },
+        userId,
+      );
+    }
   }
   async answerCommentNotification(
     parentId: string,
@@ -203,14 +233,24 @@ export class NotificationsService {
       .select('author content')
       .lean();
     if (!parentComment) return;
+    const user = await this.userModel
+      .findById(userId)
+      .select('username')
+      .lean();
+    const post = await this.postModel
+      .findById(parentComment.post)
+      .select('title')
+      .lean();
     await this.addNotification(
       parentComment?.author.toString(),
       'commentAnswer',
       commentId,
       {
         user: userId,
+        username: user?.username,
         parentId: parentId,
         parrentComment: parentComment.content.slice(0, 100),
+        postTitle: post?.title,
         content: content.slice(0, 100),
       },
       userId,
@@ -224,6 +264,14 @@ export class NotificationsService {
       .findById(commentId)
       .select('author content')
       .lean();
+    const user = await this.userModel
+      .findById(userId)
+      .select('username')
+      .lean();
+    const post = await this.postModel
+      .findById(comment?.post)
+      .select('title')
+      .lean();
     if (!comment) return;
     await this.addNotification(
       comment?.author.toString(),
@@ -231,7 +279,9 @@ export class NotificationsService {
       commentId,
       {
         user: userId,
+        username: user?.username,
         commentId: commentId,
+        postTitle: post?.title,
         content: comment.content.slice(0, 100),
       },
       userId,

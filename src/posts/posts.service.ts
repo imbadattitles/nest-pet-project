@@ -516,20 +516,10 @@ export class PostsService {
     if (addResult.modifiedCount > 0) {
       const post = await this.postModel
         .findById(postId)
-        .select('likesCount author title')
+        .select('likesCount')
         .lean();
       if (post?.author) {
-        this.notificationsService.addNotification(
-          post?.author,
-          'postLike',
-          postId,
-          {
-            user: userId,
-            post: postId,
-            postTitle: post?.title,
-          },
-          userId,
-        );
+        await this.notificationsService.postLikeNotification(postId, userId);
       }
 
       return { liked: true, likesCount: post?.likesCount || 0 };
