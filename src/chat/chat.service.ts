@@ -4,9 +4,10 @@ import {
   ForbiddenException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, ObjectId, Types } from 'mongoose';
 import { Dialog, DialogDocument } from './schemas/dialog.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
@@ -22,6 +23,8 @@ export class ChatService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway,
   ) {}
+
+  private readonly logger = new Logger(ChatService.name);
 
   async createPrivateChat(
     userId1: Types.ObjectId,
@@ -278,8 +281,10 @@ export class ChatService {
     senderId: Types.ObjectId,
     dto: CreateMessageDto,
   ): Promise<MessageDocument> {
+    // Загружаем диалог вместе со скрытым полем usersStatus
     const dialog = await this.dialogModel
       .findById(dto.dialogId)
+      .select('+usersStatus')
       .populate('participants');
 
     if (!dialog) {
@@ -322,11 +327,25 @@ export class ChatService {
 
     await message.save();
 
+    // Обновляем счётчики непрочитанных
     for (const participant of dialog.participants) {
       const userId = participant._id.toString();
       if (userId !== senderId.toString()) {
         const currentCount = dialog.unreadCount.get(userId) || 0;
         dialog.unreadCount.set(userId, currentCount + 1);
+      }
+    }
+
+    // 🔥 Снимаем флаг удаления для всех участников,
+    // если диалог был скрыт – он снова становится видимым
+    for (const participant of dialog.participants) {
+      const uId = participant._id.toString();
+      const status = dialog.usersStatus.get(uId);
+      if (status?.dialogDelete) {
+        dialog.usersStatus.set(uId, {
+          notifications: status.notifications ?? false,
+          dialogDelete: false,
+        });
       }
     }
 
@@ -342,33 +361,42 @@ export class ChatService {
     return mes;
   }
 
-  async markSingleMessageAsRead(
-    messageId: Types.ObjectId,
+  async markDialogAsRead(
     dialogId: Types.ObjectId,
     userId: Types.ObjectId,
   ): Promise<void> {
     try {
-      await this.messageModel.updateOne(
+      // console.log(
+      //   'markDialogAsRead called with',
+      //   dialogId.toString(),
+      //   userId.toString(),
+      // )
+      const dsfds = new Types.ObjectId(dialogId); // const sample = await this.messageModel.find({ dialogId });
+      // console.log('Sample messages:', JSON.stringify(sample));
+      const result = await this.messageModel.updateMany(
         {
-          _id: messageId,
+          dialogId,
           'readBy.userId': { $ne: userId },
+          [`isDeleted.${userId.toString()}`]: { $ne: true },
+          isSystem: { $ne: true },
         },
         {
           $push: { readBy: { userId, readAt: new Date() } },
           $pull: { pendingFor: userId },
         },
       );
-
-      await this.appGateway.messageAsRead(
-        dialogId.toString(),
-        messageId,
-        userId,
+      console.log(
+        `Matched ${result.matchedCount}, modified ${result.modifiedCount}`,
       );
 
-      // Единый пересчёт (использует find + save)
-      await this.recalcUnreadCount(dialogId, userId);
+      await this.dialogModel.updateOne(
+        { _id: dialogId },
+        { $set: { [`unreadCount.${userId.toString()}`]: 0 } },
+      );
+
+      await this.appGateway.dialogRead(dialogId.toString(), userId.toString());
     } catch (error) {
-      //console.log(error);
+      this.logger.error(`markDialogAsRead error`, error);
     }
   }
   async getMessages(
@@ -410,12 +438,11 @@ export class ChatService {
       .find({
         participants: userId,
         isActive: true,
-        [`usersStatus.${userId}.dialogDelete`]: false,
+        [`usersStatus.${userId}.dialogDelete`]: false, // по-прежнему скрываем удалённые
       })
       .populate('participants', 'username avatar online lastSeen')
       .exec();
 
-    // Ждём выполнения всех промисов
     const result = await Promise.all(
       dialogs.map(async (conv) => {
         const otherUser =
@@ -435,7 +462,6 @@ export class ChatService {
           .populate('replyTo')
           .populate('mentions', 'username')
           .exec();
-        //console.log('lastMessage', lastMessage);
 
         return {
           _id: conv._id,
@@ -458,18 +484,15 @@ export class ChatService {
     dialogId: Types.ObjectId,
     userId: Types.ObjectId,
   ): Promise<DialogDocument & { unreadCount: number }> {
-    // console.log('Getting dialog by ID:', dialogId, 'for user:', userId);
     const dialog = await this.dialogModel
-      .findById({
-        _id: dialogId,
-        [`usersStatus.${userId}.dialogDelete`]: false,
-      })
+      .findById(dialogId) // фильтр убран
+      .select('+usersStatus')
       .populate('participants', 'username avatar online lastSeen');
+
     if (!dialog) {
       throw new NotFoundException('Dialog not found');
     }
 
-    // Проверяем, является ли пользователь участником диалога
     const userObjectId = new Types.ObjectId(userId);
     const isParticipant = dialog.participants.some(
       (p) =>
@@ -478,6 +501,16 @@ export class ChatService {
     );
     if (!isParticipant) {
       throw new ForbiddenException('Access denied');
+    }
+
+    // 🔥 Если диалог был помечен как удалённый – восстанавливаем
+    const status = dialog.usersStatus.get(userId.toString());
+    if (status?.dialogDelete) {
+      dialog.usersStatus.set(userId.toString(), {
+        notifications: status.notifications ?? false,
+        dialogDelete: false,
+      });
+      await dialog.save();
     }
 
     return {

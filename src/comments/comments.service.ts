@@ -12,12 +12,15 @@ import { Model, Types } from 'mongoose';
 import { Comment, CommentDocument } from './schemas/comment.schema';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
     @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway,
+    @Inject(forwardRef(() => NotificationsService)) // ← добавить forwardRef
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -54,7 +57,21 @@ export class CommentsService {
     });
 
     const savedComment = await comment.save();
-
+    if (!createCommentDto.parentCommentId) {
+      await this.notificationsService.postCommentNotification(
+        createCommentDto.postId,
+        savedComment._id.toString(),
+        authorId,
+        createCommentDto.content,
+      );
+    } else {
+      await this.notificationsService.answerCommentNotification(
+        createCommentDto.parentCommentId,
+        savedComment._id.toString(),
+        authorId,
+        createCommentDto.content,
+      );
+    }
     // Загружаем автора для отправки
     await savedComment.populate('author', 'username email avatar');
 
@@ -256,6 +273,9 @@ export class CommentsService {
     }
 
     await comment.save();
+    if (!hasLiked) {
+      await this.notificationsService.commentLikeNotification(id, userId);
+    }
 
     return {
       liked: !hasLiked,

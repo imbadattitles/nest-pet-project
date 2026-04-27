@@ -7,6 +7,7 @@ import { PostsModule } from 'src/posts/posts.module';
 import { WebsocketModule } from 'src/gateway/gateway.module';
 import { ChatModule } from 'src/chat/chat.module';
 import { TempResetService } from 'src/auth/temp-reset.service';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TempResetService } from 'src/auth/temp-reset.service';
     forwardRef(() => PostsModule),
     forwardRef(() => WebsocketModule),
     ChatModule,
+    NotificationsModule,
   ],
   controllers: [UsersController],
   providers: [UsersService, TempResetService],

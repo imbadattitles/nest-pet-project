@@ -20,6 +20,7 @@ import {
 import { deleteFileByUrl, extractContentImageUrls } from './utils/image.utils';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
 import { UsersService } from 'src/users/users.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class PostsService {
@@ -27,6 +28,8 @@ export class PostsService {
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
     private commentsService: CommentsService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @Inject(forwardRef(() => NotificationsService)) // ← добавить forwardRef
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -513,8 +516,22 @@ export class PostsService {
     if (addResult.modifiedCount > 0) {
       const post = await this.postModel
         .findById(postId)
-        .select('likesCount')
+        .select('likesCount author title')
         .lean();
+      if (post?.author) {
+        this.notificationsService.addNotification(
+          post?.author,
+          'postLike',
+          postId,
+          {
+            user: userId,
+            post: postId,
+            postTitle: post?.title,
+          },
+          userId,
+        );
+      }
+
       return { liked: true, likesCount: post?.likesCount || 0 };
     }
 

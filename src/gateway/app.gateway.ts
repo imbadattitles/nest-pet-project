@@ -9,9 +9,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { forwardRef, Inject, Logger, UseGuards } from '@nestjs/common';
-import { WsJwtGuard } from '../auth/guards/auth-jwt.guard';
-import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
+import { forwardRef, Inject, Logger } from '@nestjs/common';
 import { JwtWsService } from 'src/auth/strategies/jwt-ws.service';
 import { UsersService } from 'src/users/users.service';
 import { CommentsService } from 'src/comments/comments.service';
@@ -25,16 +23,20 @@ import { Message } from 'src/chat/schemas/message.schema';
     origin: ['http://localhost:5173', 'http://localhost:3000'],
     credentials: true,
   },
-  namespace: 'events', // Один общий namespace
+  namespace: 'events',
 })
 export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
   private logger = new Logger('AppGateway');
-  private userSockets = new Map<string, string[]>(); // userId → socketIds[]
+  private userSockets = new Map<string, string[]>();
   private onlineUsers = new Set<string>();
   private onlineSubscriptions = new Map<string, Set<string>>();
+
+  // Кеши времён последнего входа/выхода для быстрой рассылки (синхронизированы с БД)
+  private lastConnectCache = new Map<string, string | null>();
+  private lastDisconnectCache = new Map<string, string | null>();
 
   constructor(
     private jwtWsService: JwtWsService,
@@ -80,35 +82,33 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      // Сохраняем сокеты пользователя
       const existingSockets = this.userSockets.get(user.id) || [];
       existingSockets.push(client.id);
       this.userSockets.set(user.id, existingSockets);
 
-      // Помечаем пользователя онлайн и оповещаем подписанных
       this.onlineUsers.add(user.id);
+
+      // Обновляем lastConnect в БД и кеше
+      await this.usersService.updateLastConnect(user.id);
+      this.lastConnectCache.set(user.id, new Date().toISOString());
+      this.lastDisconnectCache.set(user.id, null); // сброс времени дисконнекта
+
       this.broadcastUserStatus(user.id, true);
 
-      // Подписываем на персональную комнату
       client.join(`user:${user.id}`);
-
-      // Сохраняем данные в сокете
       user.contacts = userFromService.contacts;
       client.data.user = user;
 
-      // Подписка на диалоги
       const dialogs = await this.chatService.getUserDialogs(user.id);
       for (const dialog of dialogs) {
         client.join(`dialog:${dialog._id}`);
       }
 
-      // Подписка на посты
       const posts = await this.postsService.findByAuthor(user.id);
       for (const post of posts.posts) {
         client.join(`post:${post._id}`);
       }
 
-      // Комнаты контактов (для будущих уведомлений)
       for (const contactId of user.contacts || []) {
         if (!contactId) {
           await this.usersService.removeContact(
@@ -120,7 +120,6 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.join(`contact:${contactId}`);
       }
 
-      // Подписка на онлайн-статусы всех друзей
       const friendsIds = await this.getUsersFriends(user.id);
       for (const friendId of friendsIds) {
         await this.subscribeToFriendOnline(user.id, friendId);
@@ -144,10 +143,23 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (remainingSockets.length > 0) {
         this.userSockets.set(userId, remainingSockets);
       } else {
-        // Все сокеты пользователя отключились
+        // Полное отключение – сохраняем время в БД и кеше
+        this.usersService
+          .updateLastDisconnect(userId)
+          .catch((err) =>
+            this.logger.error(
+              `Failed to update lastDisconnect for ${userId}`,
+              err,
+            ),
+          );
+
+        const disconnectTime = new Date().toISOString();
+        this.lastDisconnectCache.set(userId, disconnectTime);
+        // lastConnectCache остаётся без изменений (последний вход не пропадает)
+
         this.userSockets.delete(userId);
         this.onlineUsers.delete(userId);
-        this.onlineSubscriptions.delete(userId); // очищаем подписки
+        this.onlineSubscriptions.delete(userId);
         this.broadcastUserStatus(userId, false);
       }
     }
@@ -165,28 +177,72 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     const subs = this.onlineSubscriptions.get(userId)!;
     if (subs.has(friendId)) {
-      return; // уже подписаны
+      return;
     }
 
     subs.add(friendId);
-
-    // Добавляем все сокеты пользователя в комнату для уведомлений о статусе friendId
     await this.addUserToRoom(userId, `online-subscribers:${friendId}`);
 
-    // Отправляем текущий статус каждому сокету
     const isOnline = this.onlineUsers.has(friendId);
+    let lastConnect: string | null = null;
+    let lastDisconnect: string | null = null;
+
+    if (!isOnline) {
+      // друга нет в онлайне → получаем данные из кеша или БД
+      if (this.lastDisconnectCache.has(friendId)) {
+        lastDisconnect = this.lastDisconnectCache.get(friendId) || null;
+        // lastConnect тоже мог быть закеширован ранее
+        lastConnect = this.lastConnectCache.has(friendId)
+          ? this.lastConnectCache.get(friendId) || null
+          : null;
+      } else {
+        // Загружаем из БД и заполняем кеш
+        await this.fetchAndCacheUserStatus(friendId);
+        lastConnect = this.lastConnectCache.get(friendId) || null;
+        lastDisconnect = this.lastDisconnectCache.get(friendId) || null;
+      }
+    } else {
+      // Друг онлайн – lastDisconnect должен быть null, а lastConnect можно взять из кеша
+      if (this.lastConnectCache.has(friendId)) {
+        lastConnect = this.lastConnectCache.get(friendId) || null;
+      } else {
+        // Запрашиваем из БД, чтобы иметь актуальное время входа
+        await this.fetchAndCacheUserStatus(friendId);
+        lastConnect = this.lastConnectCache.get(friendId) || null;
+      }
+      lastDisconnect = null;
+    }
+
+    // Отправляем начальный статус каждому сокету пользователя
     const userSockets = this.userSockets.get(userId) || [];
     for (const socketId of userSockets) {
       // @ts-ignore
-      const socket = this.server.sockets.get(socketId); // <-- исправлено
+      const socket = this.server.sockets.get(socketId);
       if (socket) {
         socket.emit('users:status', {
           userId: friendId,
           isOnline,
           timestamp: new Date().toISOString(),
+          lastConnect,
+          lastDisconnect,
         });
       }
     }
+  }
+
+  /**
+   * Загружает lastConnect и lastDisconnect из БД и сохраняет в кеш.
+   */
+  private async fetchAndCacheUserStatus(userId: string): Promise<void> {
+    const status = await this.usersService.getUserOnlineStatus(userId);
+    this.lastConnectCache.set(
+      userId,
+      status.lastConnect?.toISOString() || null,
+    );
+    this.lastDisconnectCache.set(
+      userId,
+      status.lastDisconnect?.toISOString() || null,
+    );
   }
 
   private async ensureOnlineSubscriptions(
@@ -212,7 +268,6 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // @ts-ignore
       const socket = this.server.sockets.get(socketId);
       if (socket && socket.connected) {
-        // Проверяем, состоит ли уже в комнате (опционально)
         const isAlreadyInRoom = socket.rooms.has(roomName);
 
         if (!isAlreadyInRoom || forceJoin) {
@@ -227,6 +282,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     }
   }
+
   private async removeUserFromRoom(
     userId: string,
     roomName: string,
@@ -236,7 +292,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // @ts-ignore
     for (const socketId of userSockets) {
       // @ts-ignore
-      const socket = this.server.sockets.get(socketId); // <-- исправлено
+      const socket = this.server.sockets.get(socketId);
       if (socket && socket.connected && socket.rooms.has(roomName)) {
         socket.leave(roomName);
         removedCount++;
@@ -245,12 +301,36 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return removedCount;
   }
 
-  // ========== ОНЛАЙН СТАТУС (изменённая рассылка) ==========
+  // ========== ОНЛАЙН СТАТУС ==========
   private broadcastUserStatus(userId: string, isOnline: boolean) {
+    let lastConnect: string | null = null;
+    let lastDisconnect: string | null = null;
+
+    if (isOnline) {
+      lastDisconnect = null;
+      lastConnect = this.lastConnectCache.get(userId) ?? null;
+    } else {
+      lastConnect = this.lastConnectCache.get(userId) ?? null;
+      lastDisconnect = this.lastDisconnectCache.get(userId) ?? null;
+
+      // Если кеш пуст (например, после перезапуска сервера) – асинхронно заполняем
+      if (lastDisconnect === undefined || lastDisconnect === null) {
+        this.fetchAndCacheUserStatus(userId)
+          .then(() => {
+            // После загрузки можно было бы повторно эмитить статус, но чтобы не усложнять – оставим так.
+          })
+          .catch((err) =>
+            this.logger.error(`Failed to fetch status for ${userId}`, err),
+          );
+      }
+    }
+
     this.server.to(`online-subscribers:${userId}`).emit('users:status', {
       userId,
       isOnline,
       timestamp: new Date().toISOString(),
+      lastConnect,
+      lastDisconnect,
     });
   }
 
@@ -312,20 +392,17 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     message: Message,
     dialog: Dialog,
   ) {
-    // Подписываем участников на комнату диалога
     const joinPromises = dialog.participants.map((p) =>
       this.addUserToRoom(p._id.toString(), `dialog:${dialogId}`),
     );
     await Promise.all(joinPromises);
 
-    // Отправляем сообщение в диалог
     this.server.to(`dialog:${dialogId}`).emit('chat:newMessage', {
       dialogId,
       message,
       timestamp: new Date().toISOString(),
     });
 
-    // Проверяем и подписываем на онлайны участников диалога
     const participantIds = dialog.participants.map((p) => p._id.toString());
     for (const pid of participantIds) {
       const otherIds = participantIds.filter((id) => id !== pid);
@@ -357,28 +434,28 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  async messageAsRead(
-    dialogId: string,
-    messageId: Types.ObjectId,
-    userId: Types.ObjectId,
-  ) {
-    this.server.to(`dialog:${dialogId}`).emit('chat:messageAsRead', {
+  async dialogRead(dialogId: string, userId: string) {
+    console.log('dialogRead', dialogId, userId);
+    this.server.to(`dialog:${dialogId}`).emit('chat:dialogRead', {
       dialogId,
-      messageId,
       userId,
+      timestamp: new Date().toISOString(),
     });
   }
 
   @SubscribeMessage('chat:setAsRead')
   async setAsRead(
     @ConnectedSocket() client: Socket,
-    @MessageBody()
-    data: { messageId: Types.ObjectId; dialogId: Types.ObjectId },
+    @MessageBody() data: { dialogId: Types.ObjectId },
   ) {
-    await this.chatService.markSingleMessageAsRead(
-      data.messageId,
-      data.dialogId,
+    console.log(
+      'setAsRead event:',
+      data.dialogId.toString(),
       client.data.user.id,
+    );
+    await this.chatService.markDialogAsRead(
+      new Types.ObjectId(data.dialogId),
+      new Types.ObjectId(client.data.user.id),
     );
   }
 
@@ -397,12 +474,11 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     client.emit('chat:sent', { to: data.to, message: data.message });
 
-    // Гарантируем подписку на онлайны друг друга
     this.ensureOnlineSubscriptions(fromUser.id, [data.to]);
     this.ensureOnlineSubscriptions(data.to, [fromUser.id]);
   }
 
-  // ========== ПОЛЬЗОВАТЕЛИ (оставлен для совместимости) ==========
+  // ========== ПОЛЬЗОВАТЕЛИ ==========
   @SubscribeMessage('users:subscribe')
   handleSubscribeToUsers(@ConnectedSocket() client: Socket) {
     this.logger.warn(

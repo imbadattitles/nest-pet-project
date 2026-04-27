@@ -13,6 +13,7 @@ import { BullModule } from '@nestjs/bull';
 import { RedisModule } from './globalServices/redis.module';
 import { CommandsModule } from './commands/commands.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { NotificationsModule } from './notifications/notifications.module';
 @Module({
   imports: [
     // Конфигурация
@@ -59,6 +60,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     WebsocketModule,
     ChatModule,
     CommandsModule,
+    NotificationsModule,
   ],
   // exports: [BullModule]
 })

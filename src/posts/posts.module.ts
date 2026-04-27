@@ -6,6 +6,7 @@ import { Post, PostSchema } from './schemas/post.schema';
 import { CommentsModule } from 'src/comments/comments.module';
 import { UsersModule } from 'src/users/users.module';
 import { User, UserSchema } from 'src/users/schemas/user.schema';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { User, UserSchema } from 'src/users/schemas/user.schema';
     ]),
     CommentsModule,
     forwardRef(() => UsersModule),
+    NotificationsModule,
   ],
   controllers: [PostsController],
   providers: [PostsService],

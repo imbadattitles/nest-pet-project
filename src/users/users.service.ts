@@ -1,3 +1,4 @@
+import { NotificationsService } from './../notifications/notifications.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AppGateway } from './../gateway/app.gateway';
 import { CurrentUser } from './../common/decorators/current-user.decorator';
@@ -23,6 +24,7 @@ export class UsersService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private AppGateway: AppGateway,
     private tempResetService: TempResetService,
+    private notificationsService: NotificationsService,
   ) {}
   private readonly logger = new Logger(UsersService.name);
   async create(createUserDto: {
@@ -127,10 +129,10 @@ export class UsersService {
       user.contacts.push(contactId);
       await user.save();
       // Уведомляем другого пользователя (если нужно)
-      this.AppGateway.sendNotification(
-        contactId,
-        `Пользователь ${currentUser.id} добавил вас в контакты.`,
-      );
+      // this.AppGateway.sendNotification(
+      //   contactId,
+      //   `Пользователь ${currentUser.id} добавил вас в контакты.`,
+      // );
       return {
         success: true,
         data: user.contacts,
@@ -269,5 +271,34 @@ export class UsersService {
       );
     }
     return { saved: !isSaved };
+  }
+
+  async updateLastConnect(userId: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { $set: { lastConnect: new Date() } },
+    );
+  }
+
+  async updateLastDisconnect(userId: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { $set: { lastDisconnect: new Date() } },
+    );
+  }
+
+  // Лёгкий метод получения только полей статуса (чтобы не тянуть весь профиль)
+  async getUserOnlineStatus(userId: string): Promise<{
+    lastConnect: Date | null;
+    lastDisconnect: Date | null;
+  }> {
+    const user = await this.userModel.findById(userId, {
+      lastConnect: 1,
+      lastDisconnect: 1,
+    });
+    return {
+      lastConnect: user?.lastConnect || null,
+      lastDisconnect: user?.lastDisconnect || null,
+    };
   }
 }

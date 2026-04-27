@@ -69,6 +69,15 @@ export class User extends Document {
     index: true,
   })
   savedPosts: Types.ObjectId[];
+
+  @Prop({ type: Date, default: null })
+  lastConnect: Date | null;
+
+  @Prop({ type: Date, default: null })
+  lastDisconnect: Date | null;
+
+  @Prop({ default: 0 })
+  unreadNotificationsCount: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
