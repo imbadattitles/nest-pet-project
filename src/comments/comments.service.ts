@@ -13,12 +13,14 @@ import { Comment, CommentDocument } from './schemas/comment.schema';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { PostsService } from 'src/posts/posts.service';
 
 @Injectable()
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
     @Inject(forwardRef(() => AppGateway)) private appGateway: AppGateway,
+    @Inject(forwardRef(() => PostsService)) private postsService: PostsService,
     @Inject(forwardRef(() => NotificationsService)) // ← добавить forwardRef
     private notificationsService: NotificationsService,
   ) {}
@@ -77,7 +79,7 @@ export class CommentsService {
 
     // Отправляем через WebSocket
     this.appGateway.sendNewComment(createCommentDto.postId, savedComment);
-
+    await this.postsService.updateCommentsCount(createCommentDto.postId);
     return savedComment;
   }
 
@@ -118,12 +120,14 @@ export class CommentsService {
     const commentsWithReplies = await Promise.all(
       rootComments.map((comment) => this.buildCommentTree(comment, 0, userId)),
     );
+    const commentsCount = await this.getCommentsCount(postId);
 
     return {
       comments: commentsWithReplies,
       pagination: {
         /* ... */
       },
+      commentsCount,
     };
   }
 
