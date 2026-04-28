@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument, Query, Types } from 'mongoose';
+import mongoose, { Document, HydratedDocument, Query, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 
 export type UserDocument = HydratedDocument<User>;
@@ -14,6 +14,7 @@ export class User extends Document {
     unique: true,
     lowercase: true,
     trim: true,
+    select: false,
     match: [
       /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
       'Пожалуйста, введите корректный email',
@@ -56,17 +57,26 @@ export class User extends Document {
   avatar: string;
 
   @Prop({
-    type: [String],
-    default: [],
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     select: false,
-    ref: 'User',
+    default: [],
+    validate: {
+      validator: function (contacts: mongoose.Types.ObjectId[]) {
+        // Проверка на уникальность
+        return (
+          contacts.length === new Set(contacts.map((id) => id.toString())).size
+        );
+      },
+      message: 'Contacts array contains duplicate values!',
+    },
   })
-  contacts: string[]; // Список ID друзей или контактов
+  contacts: mongoose.Types.ObjectId[];
 
   @Prop({
     type: [{ type: Types.ObjectId, ref: 'Post' }],
     default: [],
     index: true,
+    select: false,
   })
   savedPosts: Types.ObjectId[];
 
@@ -76,7 +86,7 @@ export class User extends Document {
   @Prop({ type: Date, default: null })
   lastDisconnect: Date | null;
 
-  @Prop({ default: 0 })
+  @Prop({ default: 0, select: false })
   unreadNotificationsCount: number;
 }
 

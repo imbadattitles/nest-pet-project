@@ -73,6 +73,7 @@ export class UsersService {
       return this.userModel
         .findById(id)
         .select('+contacts')
+        .select('+unreadNotificationsCount')
         .populate('contacts')
         .lean()
         .exec();
@@ -80,6 +81,7 @@ export class UsersService {
       return this.userModel
         .findById(id)
         .select('+contacts')
+        .select('+unreadNotificationsCount')
         .populate('contacts')
         .exec();
     }
@@ -95,7 +97,7 @@ export class UsersService {
 
     return {
       success: true,
-      data: user.contacts, // Возвращаем только список контактов
+      data: user.contacts.map((contact) => contact.toString()), // Возвращаем только список контактов
       message: 'контакты получены',
     };
   }
@@ -113,20 +115,22 @@ export class UsersService {
     }
 
     const contactId = data.userId;
-    const isContactExists = user.contacts.includes(contactId);
+    const isContactExists = user.contacts
+      .map((item) => item.toString())
+      .includes(contactId);
 
     if (isContactExists) {
       // Удаляем контакт
-      user.contacts = user.contacts.filter((id) => id !== contactId);
+      user.contacts = user.contacts.filter((id) => id.toString() !== contactId);
       await user.save();
       return {
         success: true,
-        data: user.contacts,
+        data: user.contacts.map((contact) => contact.toString()),
         message: 'Контакт удалён',
       };
     } else {
       // Добавляем контакт
-      user.contacts.push(contactId);
+      user.contacts.push(new Types.ObjectId(contactId));
       await user.save();
       // Уведомляем другого пользователя (если нужно)
       // this.AppGateway.sendNotification(
@@ -135,7 +139,7 @@ export class UsersService {
       // );
       return {
         success: true,
-        data: user.contacts,
+        data: user.contacts.map((contact) => contact.toString()),
         message: 'Контакт добавлен',
       };
     }
@@ -150,14 +154,16 @@ export class UsersService {
       throw new NotFoundException('Пользователь не найден');
     }
     // console.log(user)
-    if (user.contacts.includes(data.userId)) {
-      user.contacts = user.contacts.filter((id: string) => id !== data.userId);
+    if (user.contacts.map((id) => id.toString()).includes(data.userId)) {
+      user.contacts = user.contacts.filter(
+        (id) => id.toString() !== data.userId,
+      );
       await user.save();
     }
 
     return {
       success: true,
-      data: user.contacts,
+      data: user.contacts.map((s) => s.toString()),
       message: 'Контакт удален',
     };
   }

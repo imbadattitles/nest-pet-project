@@ -96,7 +96,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.broadcastUserStatus(user.id, true);
 
       client.join(`user:${user.id}`);
-      user.contacts = userFromService.contacts;
+      user.contacts = userFromService.contacts.map((id) => id.toString());
       client.data.user = user;
 
       const dialogs = await this.chatService.getUserDialogs(user.id);
@@ -396,7 +396,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.addUserToRoom(p._id.toString(), `dialog:${dialogId}`),
     );
     await Promise.all(joinPromises);
-
+    console.log('joinPromises', joinPromises);
+    console.log('dialog.participants', dialog.participants);
     this.server.to(`dialog:${dialogId}`).emit('chat:newMessage', {
       dialogId,
       message,
