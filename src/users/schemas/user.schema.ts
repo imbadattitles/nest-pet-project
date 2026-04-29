@@ -80,6 +80,12 @@ export class User extends Document {
   })
   savedPosts: Types.ObjectId[];
 
+  @Prop({ type: Boolean, default: true })
+  showOnline: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  allowNewDialogs: boolean;
+
   @Prop({ type: Date, default: null })
   lastConnect: Date | null;
 

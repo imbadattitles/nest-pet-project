@@ -128,7 +128,7 @@ export class NotificationsService {
     const notification = await this.notificationModel.findOneAndUpdate(
       { _id: notificationId, recipient: userId, isRead: false },
       { $set: { isRead: true } },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (notification) {

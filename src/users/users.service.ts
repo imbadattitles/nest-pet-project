@@ -204,7 +204,10 @@ export class UsersService {
     }
 
     return this.userModel
-      .findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, updateData, {
+        returnDocument: 'after',
+        runValidators: true,
+      })
       .select('-password')
       .exec();
   }

@@ -38,6 +38,9 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private lastConnectCache = new Map<string, string | null>();
   private lastDisconnectCache = new Map<string, string | null>();
 
+  // Кеш showOnline (false – пользователь скрывает свой онлайн)
+  private showOnlineMap = new Map<string, boolean>();
+
   constructor(
     private jwtWsService: JwtWsService,
     @Inject(forwardRef(() => PostsService))
@@ -86,14 +89,23 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       existingSockets.push(client.id);
       this.userSockets.set(user.id, existingSockets);
 
-      this.onlineUsers.add(user.id);
+      // showOnline: false – пользователь не отображается как онлайн и не видит чужой онлайн
+      const showOnline = userFromService.showOnline ?? true;
+      this.showOnlineMap.set(user.id, showOnline);
+
+      if (showOnline) {
+        this.onlineUsers.add(user.id);
+      }
 
       // Обновляем lastConnect в БД и кеше
       await this.usersService.updateLastConnect(user.id);
       this.lastConnectCache.set(user.id, new Date().toISOString());
       this.lastDisconnectCache.set(user.id, null); // сброс времени дисконнекта
 
-      this.broadcastUserStatus(user.id, true);
+      // Транслируем статус только если showOnline !== false
+      if (showOnline) {
+        this.broadcastUserStatus(user.id, true);
+      }
 
       client.join(`user:${user.id}`);
       user.contacts = userFromService.contacts.map((id) => id.toString());
@@ -120,9 +132,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.join(`contact:${contactId}`);
       }
 
-      const friendsIds = await this.getUsersFriends(user.id);
-      for (const friendId of friendsIds) {
-        await this.subscribeToFriendOnline(user.id, friendId);
+      // Подписка на онлайн друзей нужна, только если пользователь НЕ скрывает свой онлайн
+      if (showOnline) {
+        const friendsIds = await this.getUsersFriends(user.id);
+        for (const friendId of friendsIds) {
+          await this.subscribeToFriendOnline(user.id, friendId);
+        }
       }
 
       client.emit('authenticated', { message: 'Connected successfully' });
@@ -158,9 +173,21 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
         // lastConnectCache остаётся без изменений (последний вход не пропадает)
 
         this.userSockets.delete(userId);
-        this.onlineUsers.delete(userId);
+
+        // Удаляем из onlineUsers только если он там был (showOnline !== false)
+        if (this.showOnlineMap.get(userId) !== false) {
+          this.onlineUsers.delete(userId);
+        }
+
         this.onlineSubscriptions.delete(userId);
-        this.broadcastUserStatus(userId, false);
+
+        // Рассылаем отключение только если пользователь не скрывал онлайн
+        if (this.showOnlineMap.get(userId) !== false) {
+          this.broadcastUserStatus(userId, false);
+        }
+
+        // Удаляем из кеша showOnline
+        this.showOnlineMap.delete(userId);
       }
     }
 
@@ -172,6 +199,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     userId: string,
     friendId: string,
   ): Promise<void> {
+    // Если пользователь, который хочет подписаться, скрывает свой онлайн – не подписываем
+    const subscriberShowOnline = await this.ensureShowOnlineCached(userId);
+    if (!subscriberShowOnline) {
+      return;
+    }
+
     if (!this.onlineSubscriptions.has(userId)) {
       this.onlineSubscriptions.set(userId, new Set());
     }
@@ -183,6 +216,12 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     subs.add(friendId);
     await this.addUserToRoom(userId, `online-subscribers:${friendId}`);
 
+    // Если друг скрывает онлайн – не отправляем его статус, но подписка уже существует
+    const friendShowOnline = await this.ensureShowOnlineCached(friendId);
+    if (!friendShowOnline) {
+      return;
+    }
+
     const isOnline = this.onlineUsers.has(friendId);
     let lastConnect: string | null = null;
     let lastDisconnect: string | null = null;
@@ -191,12 +230,10 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // друга нет в онлайне → получаем данные из кеша или БД
       if (this.lastDisconnectCache.has(friendId)) {
         lastDisconnect = this.lastDisconnectCache.get(friendId) || null;
-        // lastConnect тоже мог быть закеширован ранее
         lastConnect = this.lastConnectCache.has(friendId)
           ? this.lastConnectCache.get(friendId) || null
           : null;
       } else {
-        // Загружаем из БД и заполняем кеш
         await this.fetchAndCacheUserStatus(friendId);
         lastConnect = this.lastConnectCache.get(friendId) || null;
         lastDisconnect = this.lastDisconnectCache.get(friendId) || null;
@@ -206,7 +243,6 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (this.lastConnectCache.has(friendId)) {
         lastConnect = this.lastConnectCache.get(friendId) || null;
       } else {
-        // Запрашиваем из БД, чтобы иметь актуальное время входа
         await this.fetchAndCacheUserStatus(friendId);
         lastConnect = this.lastConnectCache.get(friendId) || null;
       }
@@ -243,6 +279,19 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       userId,
       status.lastDisconnect?.toISOString() || null,
     );
+  }
+
+  /**
+   * Возвращает showOnline пользователя, используя кеш или загружая из БД.
+   */
+  private async ensureShowOnlineCached(userId: string): Promise<boolean> {
+    if (this.showOnlineMap.has(userId)) {
+      return this.showOnlineMap.get(userId)!;
+    }
+    const user = await this.usersService.findMyProfile(userId);
+    const showOnline = user?.showOnline ?? true;
+    this.showOnlineMap.set(userId, showOnline);
+    return showOnline;
   }
 
   private async ensureOnlineSubscriptions(
@@ -303,6 +352,11 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // ========== ОНЛАЙН СТАТУС ==========
   private broadcastUserStatus(userId: string, isOnline: boolean) {
+    // Не транслируем статус, если пользователь скрывает онлайн
+    if (this.showOnlineMap.get(userId) === false) {
+      return;
+    }
+
     let lastConnect: string | null = null;
     let lastDisconnect: string | null = null;
 
@@ -313,12 +367,9 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       lastConnect = this.lastConnectCache.get(userId) ?? null;
       lastDisconnect = this.lastDisconnectCache.get(userId) ?? null;
 
-      // Если кеш пуст (например, после перезапуска сервера) – асинхронно заполняем
       if (lastDisconnect === undefined || lastDisconnect === null) {
         this.fetchAndCacheUserStatus(userId)
-          .then(() => {
-            // После загрузки можно было бы повторно эмитить статус, но чтобы не усложнять – оставим так.
-          })
+          .then(() => {})
           .catch((err) =>
             this.logger.error(`Failed to fetch status for ${userId}`, err),
           );
